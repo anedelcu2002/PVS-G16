@@ -91,12 +91,15 @@ for m = 1:2
     FF = modules(m).FF;
     Ns = modules(m).Ns;
     
-    %% -------- INOCT TEMPERATURE --------
-    INOCT_rack = NOCT - 3;
+    %% -------- DUFFIE --------
+    tau_alpha = 0.9;
     
-    Tm = T_amb + (G_POA / G_NOCT) .* (INOCT_rack - 20);
-    dT = Tm - T_STC;
-    
+    Tm_Duffie = T_amb + ...
+        (G_POA / G_NOCT) .* (NOCT - 20) .* ...
+        (1 - eta_ref/tau_alpha) .* ...
+        (9.5 ./ (5.7 + 3.8*w));
+        
+    dT = Tm_Duffie - T_STC;  
     %% ===== FORMULAS FROM YOUR SLIDE =====
     
     % V_OC(Tm, G_STC)
