@@ -4,7 +4,7 @@ clc; clear; close all; warning("off");
 projectRoot = fileparts(mfilename('fullpath'));
 addpath(fullfile(projectRoot,"scripts"));
 
-%% 1. Load electricity demand directly (skip steps 1-4)
+%% Load electricity demand
 elecDemandCsvPath = fullfile(projectRoot, "amersfoort_electricity_demand.csv");
 heatDemandCsvPath = "";  % no heat demand file when skipping steps 1-4
 
@@ -13,9 +13,9 @@ if ~exist(elecDemandCsvPath, 'file')
 end
 
 elec_tbl = readtable(elecDemandCsvPath);
-P_load = elec_tbl{:, 2} / 3600; % convert J (per hour) to W
+P_load = elec_tbl{:, 2} / 3600 / 72367; % convert J (per hour) to Wh
 
-%% 5b. Load the initial solar profile for 1 inverter directly
+%% Load the initial solar profile
 solarCsvPath = fullfile(projectRoot, "solar_profiles_1_inverter.csv");
 
 if ~exist(solarCsvPath, 'file')
@@ -24,7 +24,7 @@ end
 
 solar_tbl = readtable(solarCsvPath);
 Solar1 = table2array(solar_tbl);
-Solar1(:,2) = Solar1(:,2) / 3600; % convert J (per hour) to W
+Solar1(:,2) = Solar1(:,2) / 3600 / 649; % convert J (per hour) to Wh
 
 %% Optimization
 
@@ -46,14 +46,14 @@ params.objective_type = 'economic';  % Choose: 'economic' (cost minimization) or
 
 % Technical
 params.dt_h = 1.0;
-params.x_pv_ub = 10000;
+params.x_pv_ub = 20;
 
 % Economics
 params.discount_rate = 0.06;
 params.project_life = 20;
 
-params.c_pv_unit_capex = 261195.56;           % /inverter
-params.c_pv_unit_fom_per_year = 5145.5;      % /inverter/year
+params.c_pv_unit_capex = 261195.56;           % /panel
+params.c_pv_unit_fom_per_year = 5145.5;      % /panel/year
 
 
 % ============== BATTERY PARAMETERS (if enabled) ==============
@@ -65,7 +65,7 @@ params.soc_min = 0.10;                      % Min state-of-charge (10%)
 params.soc_max = 0.90;                      % Max state-of-charge (90%)
 params.soc0 = 0.50;                         % Initial SOC
 params.soc_tolerance = 10e3;                % Cyclic tolerance (Wh)
-params.E_bess_ub = 10 * 1e9;              % Battery energy upper bound
+params.E_bess_ub = 1 * 1e6;              % Battery energy upper bound (Wh)
 
 % Economics
 params.c_bess_E_capex_per_Wh = 0.334;         % Battery capex (EUR/Wh)
@@ -77,7 +77,7 @@ params.max_curtail_pct = 0.10;              % Max annual curtailment (10% of loa
 % ============== LIFECYCLE GHG PARAMETERS (EMBEDDED EMISSIONS) ===============
 % All GHG intensities in kg CO2-eq per unit
 % For now, all set to 1 kg CO2-eq per unit (can be updated with actual values)
-params.ghg_intensity_pv_per_unit = 831637.25;         % kg CO2-eq per PV inverter unit
+params.ghg_intensity_pv_per_unit = 831637.25;         % kg CO2-eq per PV panel unit
 params.ghg_intensity_batt_per_wh = 0.09;         % kg CO2-eq per Wh of battery storage
 
 
@@ -127,11 +127,11 @@ tic
 result_50 = build_problem(data, params, constraint_registry, objective_registry);
 elapsed = toc;
 
-%% 7. Visualization - Forward-compatible supply-demand analysis
+%% Visualization
 fprintf('\nGenerating visualization...\n')
 
 
-% ====== COST AND EMISSIONS BREAKDOWNS (computed once for SOC50%) ======
+% ====== COST AND EMISSIONS BREAKDOWNS ======
 if ~strcmp(result_50.status, 'infeasible or error')
     % --- COST BREAKDOWN ---
     cost_breakdown = struct();
@@ -167,42 +167,37 @@ if ~strcmp(result_50.status, 'infeasible or error')
     % --- CALCULATE LCOE AND CARBON INTENSITY ---
     % Annual energy demand (sum of hourly loads in Wh, assuming data.P_load is in W)
     annual_energy_Wh = sum(data.P_load) * params.dt_h;
-    % LCOE in EUR/MWh = annual cost / annual energy (energy systems only, excluding heat)
-    lcoe_eur_per_Mwh = (cost_breakdown.pv + cost_breakdown.batt) / (annual_energy_Wh / 1e6);
+    % LCOE in EUR/kWh = annual cost / annual energy (energy systems only, excluding heat)
+    lcoe_eur_per_kwh = (cost_breakdown.pv + cost_breakdown.batt) / (annual_energy_Wh / 1e3);
     
-    % Carbon intensity in kg CO2-eq/MWh = lifecycle emissions / (annual demand * project life)
+    % Carbon intensity in kg CO2-eq/kWh = lifecycle emissions / (annual demand * project life)
     lifetime_energy_Wh = annual_energy_Wh * params.project_life;
-    carbon_intensity_kg_per_Mwh = (emissions_breakdown.pv + emissions_breakdown.batt) / (lifetime_energy_Wh / 1e6);
+    carbon_intensity_kg_per_kwh = (emissions_breakdown.pv + emissions_breakdown.batt) / (lifetime_energy_Wh / 1e3);
     
     % ===== PRINT SUMMARY TO CONSOLE =====
-    fprintf('\n========== OPTIMIZATION RESULTS: SOC0 = 50%% ==========\n');
+    fprintf('\n========== OPTIMIZATION RESULTS%% ==========\n');
     fprintf('Objective: %s\n', params.objective_type);
     fprintf('\n--- SYSTEM CAPACITIES ---\n');
-    fprintf('  PV inverters: %.2f units\n', result_50.x_pv);
+    fprintf('  PV panels: %.2f units\n', result_50.x_pv);
     if params.enable_battery && isfield(result_50, 'E_bess')
-        fprintf('  Battery storage: %.2e Wh (%.2f GWh)\n', result_50.E_bess, result_50.E_bess/1e9);
+        fprintf('  Battery storage: %.2e Wh (%.2f kWh)\n', result_50.E_bess, result_50.E_bess/1e3);
     end
     
-    fprintf('\n--- COST BREAKDOWN (Annual, Million EUR) ---\n');
-    fprintf('  PV:        %.2f\n', cost_breakdown.pv / 1e6);
+    fprintf('\n--- COST BREAKDOWN (Annual, EUR) ---\n');
+    fprintf('  PV:        %.2f\n', cost_breakdown.pv);
     if params.enable_battery
-        fprintf('  Battery:   %.2f\n', cost_breakdown.batt / 1e6);
+        fprintf('  Battery:   %.2f\n', cost_breakdown.batt);
     end
-    
-    fprintf('  TOTAL:     %.2f\n', cost_breakdown.total / 1e6);
-    
-    fprintf('\n--- KEY ECONOMIC METRICS ---\n');
-    fprintf('  LCOE (Levelized Cost of Energy): %.4f EUR/MWh\n', lcoe_eur_per_Mwh);
-    
-    fprintf('\n--- GHG EMISSIONS BREAKDOWN (Life-cycle, Megatons CO2-eq) ---\n');
-    fprintf('  PV:        %.2f\n', emissions_breakdown.pv / 1e9);
+    fprintf('  TOTAL:     %.2f\n', cost_breakdown.total);
+    fprintf('  LCOE (Levelized Cost of Energy): %.4f EUR/kWh\n', lcoe_eur_per_kwh);
+    fprintf('\n--- GHG EMISSIONS BREAKDOWN (Life-cycle, Tons CO2-eq) ---\n');
+    fprintf('  PV:        %.2f\n', emissions_breakdown.pv / 1e3);
     if params.enable_battery
-        fprintf('  Battery:   %.2f\n', emissions_breakdown.batt / 1e9);
+        fprintf('  Battery:   %.2f\n', emissions_breakdown.batt / 1e3);
     end
-    fprintf('  TOTAL:     %.2f\n', emissions_breakdown.total / 1e9);
-    
-    fprintf('\n--- KEY ENVIRONMENTAL METRICS ---\n');
-    fprintf('  Carbon Intensity: %.4f kg CO2-eq/MWh\n', carbon_intensity_kg_per_Mwh);
+    fprintf('  TOTAL:     %.2f\n', emissions_breakdown.total / 1e3);
+
+    fprintf('  Carbon Intensity: %.4f kg CO2-eq/kWh\n', carbon_intensity_kg_per_kwh);
     fprintf('====================================================================\n\n');
     
     % ====== PIE CHARTS ======
@@ -216,7 +211,7 @@ if ~strcmp(result_50.status, 'infeasible or error')
     cost_values = cost_values(nonzero_mask);
     pie(cost_values);
     legend(cost_labels, 'Location', 'bestoutside');
-    title(sprintf('Annual Cost Breakdown (SOC0 = 50%%)\nTotal: %.2f Million EUR', cost_breakdown.total / 1e6));
+    title(sprintf('Annual Cost Breakdown (SOC0 = 50%%)\nTotal: %.2f EUR', cost_breakdown.total));
     
     % Emissions pie chart (split backup into capacity and dispatch)
     fig_emis = figure('Name', 'GHG Emissions Breakdown (SOC0 = 50%)', 'NumberTitle', 'off', 'Position', [700 100 600 500], 'WindowStyle', 'docked');
@@ -228,7 +223,7 @@ if ~strcmp(result_50.status, 'infeasible or error')
     emis_values = emis_values(nonzero_emis_mask);
     pie(emis_values);
     legend(emis_labels, 'Location', 'bestoutside');
-    title(sprintf('Lifecycle GHG Breakdown (SOC0 = 50%%)\nTotal: %.2f Megatons CO2-eq', emissions_breakdown.total / 1e9));
+    title(sprintf('Lifecycle GHG Breakdown (SOC0 = 50%%)\nTotal: %.2f Tons CO2-eq', emissions_breakdown.total / 1e3));
 end
 
 % ====== COMPLIANCE CHECK VISUALIZATIONS (SOC0 = 50%) ======
@@ -280,7 +275,7 @@ supply_components.excess = excess_generation;
 center_x = (1920 - 1000) / 2;  % 560
 center_y = (1080 - 800) / 2;  % 240
         
-titleSuffix = sprintf('MVP System Sizing Results: %.0f PV inverters', result_50.x_pv);
+titleSuffix = sprintf('MVP System Sizing Results: %.0f PV panels', result_50.x_pv);
 
 % --- YEARLY SUPPLY-DEMAND BALANCE (Cumulative Stacked Bar Chart) ---
 % Aggregate hourly data by week

@@ -8,7 +8,7 @@ function obj = cost_slack(vars, data, params)
     end
     
     % Slack penalty when enabled
-    penalty_per_mwh = 1000000;
-    E_slack_mwh = sum(vars.slack) * params.dt_h / 1e6;
-    obj = penalty_per_mwh * E_slack_mwh;
+    penalty_per_wh = 10000000;
+    E_slack_wh = sum(vars.slack) * params.dt_h;
+    obj = penalty_per_wh * E_slack_wh;
 end

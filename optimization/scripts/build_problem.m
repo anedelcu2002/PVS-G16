@@ -107,9 +107,9 @@ function result = build_problem(data, params, constraint_registry, objective_reg
         fprintf('RENEWABLE ENERGY SYSTEM SIZING:\n');
         fprintf('  PV inverters:        %.4f units\n', result.x_pv);
         if battery_enabled
-            fprintf('  Battery capacity:    %.4f GWh\n', result.E_bess / 1e9);
-            fprintf('  Battery power (C-rate %.2f h⁻¹): %.4f GW\n', ...
-                params.battery_c_rating, result.E_bess * params.battery_c_rating / 1e9);
+            fprintf('  Battery capacity:    %.4f kWh\n', result.E_bess / 1e3);
+            fprintf('  Battery power (C-rate %.2f h⁻¹): %.4f kW\n', ...
+                params.battery_c_rating, result.E_bess * params.battery_c_rating / 1e3);
         end
 
         % Annual energy balance

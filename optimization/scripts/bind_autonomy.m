@@ -5,8 +5,6 @@ function constraints = bind_autonomy(vars, data, params)
     % without renewable generation. Anchors battery sizing and helps
     % Gurobi find feasible charge/discharge patterns quickly.
     %
-    % In ED mode with fixed E_bess, this constraint is skipped.
-    %
     % Default: 2-day autonomy
     %   E_bess >= 2 * E_load_annual / 365 / (soc_max - soc_min)
 
@@ -17,12 +15,6 @@ function constraints = bind_autonomy(vars, data, params)
     
     % Check that battery exists
     if ~isfield(vars, 'E_bess')
-        constraints = [];
-        return;
-    end
-    
-    % Skip if E_bess is fixed (not a decision variable) - ED mode
-    if ~isa(vars.E_bess, 'sdpvar')
         constraints = [];
         return;
     end
