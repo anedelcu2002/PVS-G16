@@ -11,12 +11,6 @@ function constraints = bind_match_demand(vars, data, params)
         return;
     end
     
-    % Skip if PV sizing variable is fixed (cannot be optimized)
-    if ~isa(vars.x_pv, 'sdpvar')
-        constraints = [];
-        return;
-    end
-    
     dt_h = params.dt_h;
     E_load_total = sum(data.P_load) * dt_h;
     E_pv_total = vars.x_pv * sum(data.P_solar_unit) * dt_h;

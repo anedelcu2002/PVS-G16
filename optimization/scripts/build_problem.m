@@ -3,8 +3,8 @@ function result = build_problem(data, params, constraint_registry, objective_reg
     
     vars.x_pv = sdpvar(1, 1); 
 
-    T = numel(data.P_load);
-    vars.slack = sdpvar(T, 1);    % Unmet demand per hour [W]
+    T = numel(data.P_load); 
+    vars.slack = sdpvar(T, 1);    % Unmet demand per hour [kW]
     
     %% Create battery variables if enabled
     battery_enabled = isfield(params, 'enable_battery') && params.enable_battery;
@@ -12,11 +12,11 @@ function result = build_problem(data, params, constraint_registry, objective_reg
     if battery_enabled
         vars.E_bess = sdpvar(1, 1);        % Decision variable
         
-        vars.p_ch = sdpvar(T, 1);            % Charging power per hour [W]
-        vars.p_dis = sdpvar(T, 1);           % Discharging power per hour [W]
-        vars.e_stored = sdpvar(T+1, 1);      % Stored energy progression [Wh]
+        vars.p_ch = sdpvar(T, 1);            % Charging power per hour [kW]
+        vars.p_dis = sdpvar(T, 1);           % Discharging power per hour [kW]
+        vars.e_stored = sdpvar(T+1, 1);      % Stored energy progression [kWh]
         vars.z = binvar(T, 1);               % Charge mode binary: 1=charge, 0=discharge
-        vars.p_curt = sdpvar(T, 1);          % Curtailment [W]
+        vars.p_curt = sdpvar(T, 1);          % Curtailment [kW]
     end
 
     %% Initialize constraints with variable bounds
@@ -105,32 +105,31 @@ function result = build_problem(data, params, constraint_registry, objective_reg
         
         % Renewable energy system sizing
         fprintf('RENEWABLE ENERGY SYSTEM SIZING:\n');
-        fprintf('  PV inverters:        %.4f units\n', result.x_pv);
+        fprintf('  PV:        %.4f kWp\n', result.x_pv);
         if battery_enabled
-            fprintf('  Battery capacity:    %.4f kWh\n', result.E_bess / 1e3);
+            fprintf('  Battery capacity:    %.4f kWh\n', result.E_bess);
             fprintf('  Battery power (C-rate %.2f h⁻¹): %.4f kW\n', ...
-                params.battery_c_rating, result.E_bess * params.battery_c_rating / 1e3);
+                params.battery_c_rating, result.E_bess * params.battery_c_rating);
         end
 
         % Annual energy balance
         fprintf('\nANNUAL ENERGY BALANCE:\n');
-        fprintf('  Total demand:        %.2e Wh\n', result.E_load_annual);
-        fprintf('  PV generation:       %.2e Wh (%.1f%%)\n', result.E_pv_annual, result.pv_percent);
+        fprintf('  Total demand:        %.2e kWh\n', result.E_load_annual);
+        fprintf('  PV generation:       %.2e kWh (%.1f%%)\n', result.E_pv_annual, result.pv_percent);
         if battery_enabled
-            fprintf('  Battery dispatch:    %.2e Wh (%.1f%% of demand)\n', ...
+            fprintf('  Battery dispatch:    %.2e kWh (%.1f%% of demand)\n', ...
                 result.E_battery_annual, 100 * result.E_battery_annual / result.E_load_annual);
-            fprintf('  Curtailment:         %.2e Wh (%.1f%% of generation)\n', ...
+            fprintf('  Curtailment:         %.2e kWh (%.1f%% of generation)\n', ...
                 result.E_curt_annual, 100 * result.E_curt_annual / (result.E_pv_annual));
         end
-        fprintf('  Unmet demand (slack):%.2e Wh (%.1f%%)\n', result.E_slack_annual, result.slack_percent);
+        fprintf('  Unmet demand (slack):%.2e kWh (%.1f%%)\n', result.E_slack_annual, result.slack_percent);
         
         % Cost summary
         fprintf('\nECONOMIC OUTCOMES:\n');
         fprintf('  Total system cost (annualized): %.2e $/year\n', result.cost);
         
         % Calculate and display LCOE
-        energy_served_wh = result.E_load_annual - result.E_slack_annual;
-        energy_served_kwh = energy_served_wh / 1000;
+        energy_served_kwh = result.E_load_annual - result.E_slack_annual;
         lcoe_eur_per_kwh = result.cost / energy_served_kwh; 
         fprintf('  LCOE (Levelized Cost of Energy): %.4f €/kWh\n', lcoe_eur_per_kwh);
         
@@ -147,8 +146,8 @@ function result = build_problem(data, params, constraint_registry, objective_reg
             cost_pv_ann = cost_pv_capex_ann + cost_pv_fom_ann;
             
             % Battery costs (annualized capex + FOM)
-            c_bess_E_capex = get_param_or_default(params, 'c_bess_E_capex_per_Wh', 250);
-            c_bess_E_fom = get_param_or_default(params, 'c_bess_E_fom_per_Wh_yr', 5);
+            c_bess_E_capex = get_param_or_default(params, 'c_bess_E_capex_per_kWh', 250);
+            c_bess_E_fom = get_param_or_default(params, 'c_bess_E_fom_per_kWh_yr', 5);
             cost_bess_capex_ann = CRF * c_bess_E_capex * result.E_bess;
             cost_bess_fom_ann = c_bess_E_fom * result.E_bess;
             cost_bess_ann = cost_bess_capex_ann + cost_bess_fom_ann;

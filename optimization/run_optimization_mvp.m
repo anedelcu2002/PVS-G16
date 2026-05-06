@@ -5,33 +5,21 @@ projectRoot = fileparts(mfilename('fullpath'));
 addpath(fullfile(projectRoot,"scripts"));
 
 %% Load electricity demand
-elecDemandCsvPath = fullfile(projectRoot, "amersfoort_electricity_demand.csv");
-heatDemandCsvPath = "";  % no heat demand file when skipping steps 1-4
-
-if ~exist(elecDemandCsvPath, 'file')
-    error('Electricity demand file not found: %s', elecDemandCsvPath);
-end
-
-elec_tbl = readtable(elecDemandCsvPath);
-P_load = elec_tbl{:, 2} / 3600 / 72367; % convert J (per hour) to Wh
+elec_tbl = readtable('Year 2026 Load Calculation.xlsx','Sheet','Sheet1');
+P_load = elec_tbl{:, 2}; % hourly load in kW
 
 %% Load the initial solar profile
 solarCsvPath = fullfile(projectRoot, "solar_profiles_1_inverter.csv");
 
-if ~exist(solarCsvPath, 'file')
-    error('Solar profile file not found: %s', solarCsvPath);
-end
-
-solar_tbl = readtable(solarCsvPath);
-Solar1 = table2array(solar_tbl);
-Solar1(:,2) = Solar1(:,2) / 3600 / 649; % convert J (per hour) to Wh
+solar_tbl = readtable('renewables_ninja_1_kw.csv');
+Solar1 = solar_tbl.electricity; % hourly solar generation in kW   
 
 %% Optimization
 
 % set data
 data = struct( ...
     'P_load', P_load, ...
-    'P_solar_unit', Solar1(:,2) ...
+    'P_solar_unit', Solar1 ...
 );
 
 % set parameters
@@ -46,14 +34,14 @@ params.objective_type = 'economic';  % Choose: 'economic' (cost minimization) or
 
 % Technical
 params.dt_h = 1.0;
-params.x_pv_ub = 20;
+params.x_pv_ub = 50; % max is 50 kWp
 
 % Economics
 params.discount_rate = 0.06;
 params.project_life = 20;
 
-params.c_pv_unit_capex = 261195.56;           % /panel
-params.c_pv_unit_fom_per_year = 5145.5;      % /panel/year
+params.c_pv_unit_capex = 10;           % /kWp
+params.c_pv_unit_fom_per_year = 0.1;      % /kWp/year
 
 
 % ============== BATTERY PARAMETERS (if enabled) ==============
@@ -64,29 +52,28 @@ params.eta_dis = sqrt(0.93);                % Discharging efficiency (same as ch
 params.soc_min = 0.10;                      % Min state-of-charge (10%)
 params.soc_max = 0.90;                      % Max state-of-charge (90%)
 params.soc0 = 0.50;                         % Initial SOC
-params.soc_tolerance = 10e3;                % Cyclic tolerance (Wh)
-params.E_bess_ub = 1 * 1e6;              % Battery energy upper bound (Wh)
+params.soc_tolerance = 10e3;                % Cyclic tolerance (kWh)
+params.E_bess_ub = 1 * 10e3;              % Battery energy upper bound (kWh)
 
 % Economics
-params.c_bess_E_capex_per_Wh = 0.334;         % Battery capex (EUR/Wh)
-params.c_bess_E_fom_per_Wh_yr = params.c_bess_E_capex_per_Wh*0.04;          % Battery FOM (EUR/Wh/year)
+params.c_bess_E_capex_per_kWh = 0.3;         % Battery capex (EUR/kWh)
+params.c_bess_E_fom_per_kWh_yr = params.c_bess_E_capex_per_kWh*0.04;          % Battery FOM (EUR/kWh/year)
 params.max_curtail_pct = 0.10;              % Max annual curtailment (10% of load)
 % ==============================================================
 
 
 % ============== LIFECYCLE GHG PARAMETERS (EMBEDDED EMISSIONS) ===============
 % All GHG intensities in kg CO2-eq per unit
-% For now, all set to 1 kg CO2-eq per unit (can be updated with actual values)
-params.ghg_intensity_pv_per_unit = 831637.25;         % kg CO2-eq per PV panel unit
-params.ghg_intensity_batt_per_wh = 0.09;         % kg CO2-eq per Wh of battery storage
+params.ghg_intensity_pv_per_unit = 5;         % kg CO2-eq per kWp
+params.ghg_intensity_batt_per_kWh = 0.09;         % kg CO2-eq per kWh of battery storage
 
 
 fprintf('Data check before optimization:\n');
 fprintf('  P_load: min=%.2e, max=%.2e\n', min(data.P_load), max(data.P_load));
 fprintf('  P_solar_unit: min=%.2e, max=%.2e\n', min(data.P_solar_unit), max(data.P_solar_unit));
-fprintf('  Max possible gen: %.2e W\n', ...
+fprintf('  Max possible gen: %.2e kW\n', ...
     params.x_pv_ub*max(data.P_solar_unit));
-fprintf('  Peak load: %.2e W\n', max(data.P_load));
+fprintf('  Peak load: %.2e kW\n', max(data.P_load));
 
 fprintf('Solving MVP optimization problem...\n')
 fprintf('\n')
@@ -144,8 +131,8 @@ if ~strcmp(result_50.status, 'infeasible or error')
     % Battery cost
     cost_breakdown.batt = 0;
     if params.enable_battery && isfield(result_50, 'E_bess')
-        cost_breakdown.batt = CRF * params.c_bess_E_capex_per_Wh * result_50.E_bess + ...
-                              params.c_bess_E_fom_per_Wh_yr * result_50.E_bess;
+        cost_breakdown.batt = CRF * params.c_bess_E_capex_per_kWh * result_50.E_bess + ...
+                              params.c_bess_E_fom_per_kWh_yr * result_50.E_bess;
     end
     
     cost_breakdown.total = cost_breakdown.pv + cost_breakdown.batt;
@@ -159,28 +146,28 @@ if ~strcmp(result_50.status, 'infeasible or error')
     % Battery emissions
     emissions_breakdown.batt = 0;
     if params.enable_battery && isfield(result_50, 'E_bess')
-        emissions_breakdown.batt = params.ghg_intensity_batt_per_wh * result_50.E_bess;
+        emissions_breakdown.batt = params.ghg_intensity_batt_per_kWh * result_50.E_bess;
     end
     
     emissions_breakdown.total = emissions_breakdown.pv + emissions_breakdown.batt;
     
     % --- CALCULATE LCOE AND CARBON INTENSITY ---
-    % Annual energy demand (sum of hourly loads in Wh, assuming data.P_load is in W)
-    annual_energy_Wh = sum(data.P_load) * params.dt_h;
+    % Annual energy demand (sum of hourly loads in kWh, assuming data.P_load is in kW)
+    annual_energy_kWh = sum(data.P_load) * params.dt_h;
     % LCOE in EUR/kWh = annual cost / annual energy (energy systems only, excluding heat)
-    lcoe_eur_per_kwh = (cost_breakdown.pv + cost_breakdown.batt) / (annual_energy_Wh / 1e3);
+    lcoe_eur_per_kwh = (cost_breakdown.pv + cost_breakdown.batt) / (annual_energy_kWh);
     
     % Carbon intensity in kg CO2-eq/kWh = lifecycle emissions / (annual demand * project life)
-    lifetime_energy_Wh = annual_energy_Wh * params.project_life;
-    carbon_intensity_kg_per_kwh = (emissions_breakdown.pv + emissions_breakdown.batt) / (lifetime_energy_Wh / 1e3);
+    lifetime_energy_kWh = annual_energy_kWh * params.project_life;
+    carbon_intensity_kg_per_kwh = (emissions_breakdown.pv + emissions_breakdown.batt) / (lifetime_energy_kWh);
     
     % ===== PRINT SUMMARY TO CONSOLE =====
     fprintf('\n========== OPTIMIZATION RESULTS%% ==========\n');
     fprintf('Objective: %s\n', params.objective_type);
     fprintf('\n--- SYSTEM CAPACITIES ---\n');
-    fprintf('  PV panels: %.2f units\n', result_50.x_pv);
+    fprintf('  PV panels: %.2f kWp\n', result_50.x_pv);
     if params.enable_battery && isfield(result_50, 'E_bess')
-        fprintf('  Battery storage: %.2e Wh (%.2f kWh)\n', result_50.E_bess, result_50.E_bess/1e3);
+        fprintf('  Battery storage: %.2e kWh\n', result_50.E_bess);
     end
     
     fprintf('\n--- COST BREAKDOWN (Annual, EUR) ---\n');
@@ -234,29 +221,29 @@ supply_components = struct();
 demand_components = struct();
 
 % Current generation sources
-supply_components.solar = result_50.x_pv * data.P_solar_unit / 1e6;  % Convert to MW
+supply_components.solar = result_50.x_pv * data.P_solar_unit / 1e3;  % Convert to MW
 
 % Demand breakdown
-demand_components.load = data.P_load / 1e6;  % Convert to MW
+demand_components.load = data.P_load / 1e3;  % Convert to MW
 
 % Handle battery if enabled
 if isfield(result_50, 'p_dis')
-    supply_components.batt_dis = result_50.p_dis / 1e6;  % Battery discharge in MW
+    supply_components.batt_dis = result_50.p_dis / 1e3;  % Battery discharge in MW
 else
     supply_components.batt_dis = zeros(T, 1);
 end
 
 if isfield(result_50, 'p_ch')
-    demand_components.batt_ch = result_50.p_ch / 1e6;  % Battery charge in MW
+    demand_components.batt_ch = result_50.p_ch / 1e3;  % Battery charge in MW
 else
     demand_components.batt_ch = zeros(T, 1);
 end
 
 % Handle slack
 if any(isnan(result_50.slack))
-    supply_components.slack = zeros(size(result_50.slack)) / 1e6;
+    supply_components.slack = zeros(size(result_50.slack)) / 1e3;
 else
-    supply_components.slack = result_50.slack / 1e6;
+    supply_components.slack = result_50.slack / 1e3;
 end
 
 total_met_demand = supply_components.solar + supply_components.batt_dis;
@@ -275,7 +262,7 @@ supply_components.excess = excess_generation;
 center_x = (1920 - 1000) / 2;  % 560
 center_y = (1080 - 800) / 2;  % 240
         
-titleSuffix = sprintf('MVP System Sizing Results: %.0f PV panels', result_50.x_pv);
+titleSuffix = sprintf('MVP System Sizing Results: %.0f PV kWp', result_50.x_pv);
 
 % --- YEARLY SUPPLY-DEMAND BALANCE (Cumulative Stacked Bar Chart) ---
 % Aggregate hourly data by week
@@ -299,12 +286,12 @@ end
 fig1 = figure('Name', 'Weekly Supply-Demand Balance (Cumulative) - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 1000 600], 'WindowStyle', 'docked');
 hold on;
 
-% Create stacked bar chart showing power balance (convert to GWh)
+% Create stacked bar chart showing power balance (convert to MWh)
 % Positive side: generation sources
 % Negative side: battery charging demand
 week_numbers = 1:weeks_in_year;
-weekly_supply = [weekly_solar, weekly_batt_dis] / 1000;  % Convert MWh to GWh
-weekly_demand_components = [-weekly_batt_ch, weekly_slack] / 1000;  % Convert MWh to GWh
+weekly_supply = [weekly_solar, weekly_batt_dis] / 1000;  % Convert kWh to MWh
+weekly_demand_components = [-weekly_batt_ch, weekly_slack] / 1000;  % Convert kWh to MWh
 
 % Plot supply sources (positive)
 h_Supply = bar(week_numbers, weekly_supply, 'stacked', 'EdgeColor', 'none');
@@ -318,7 +305,7 @@ h_Demand = bar(week_numbers, weekly_demand_components, 'stacked', 'EdgeColor', '
 h_Demand(1).FaceColor = '#FC8d62';  % Battery Charge (reddish, different from discharge)
 h_Demand(2).FaceColor = '#984EA3';  % Unmet (Slack) - purple, distinct from battery discharge
 
-% Overlay weekly load demand as a line (convert to GWh)
+% Overlay weekly load demand as a line (convert to MWh)
 hold on;
 h_line = plot(week_numbers, weekly_demand / 1000, 'ko-', 'LineWidth', 2, 'MarkerSize', 5, 'DisplayName', 'Weekly Load');
 
@@ -327,7 +314,7 @@ yline(0, 'k-', 'LineWidth', 0.5, 'HandleVisibility', 'off');
 
 hold off;
 xlabel('Week of Year'); 
-ylabel('Energy (GWh)');
+ylabel('Energy (MWh)');
 title(sprintf('Weekly Power Balance - Cumulative (SOC0 = 50%%)\n%s', titleSuffix));
 legend([h_Supply(1), h_Supply(2), h_Demand(1), h_Demand(2), h_line], ...
         {'Solar', 'Battery Discharge', 'Battery Charge', 'Unmet (Slack)', 'Weekly Load'}, ...
