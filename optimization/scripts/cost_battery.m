@@ -18,9 +18,9 @@ function obj = cost_battery(vars, data, params)
     CRF = discount_rate * (1 + discount_rate)^project_life / ...
           ((1 + discount_rate)^project_life - 1);
     
-    % Battery costs per Wh
-    c_bess_E_capex = get_param_or_default(params, 'c_bess_E_capex_per_Wh', 0.1);      % $/Wh
-    c_bess_E_fom = get_param_or_default(params, 'c_bess_E_fom_per_Wh_yr', 0.005);    % $/Wh/year
+    % Battery costs per kWh
+    c_bess_E_capex = get_param_or_default(params, 'c_bess_E_capex_per_kWh', 0.1);      % $/kWh
+    c_bess_E_fom = get_param_or_default(params, 'c_bess_E_fom_per_kWh_yr', 0.005);    % $/kWh/year
     
     % Annualized battery cost = capex + FOM
     obj_battery = CRF * c_bess_E_capex * vars.E_bess + c_bess_E_fom * vars.E_bess;

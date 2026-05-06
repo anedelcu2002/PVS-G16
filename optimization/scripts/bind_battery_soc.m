@@ -10,7 +10,7 @@ function constraints = bind_battery_soc(vars, data, params)
     soc_min = get_param_or_default(params, 'soc_min', 0.20);     % Minimum SOC (20%)
     soc_max = get_param_or_default(params, 'soc_max', 0.95);     % Maximum SOC (95%)
     soc0 = get_param_or_default(params, 'soc0', 0.50);           % Initial SOC (50%)
-    soc_tol = get_param_or_default(params, 'soc_tolerance', 10e3); % Tolerance for cycle (Wh)
+    soc_tol = get_param_or_default(params, 'soc_tolerance', 10e3); % Tolerance for cycle (kWh)
     
     constraint_list = [];
     

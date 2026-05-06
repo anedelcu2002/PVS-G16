@@ -27,14 +27,14 @@ params = struct();
 
 % ============== SYSTEM TOGGLES ==============
 params.enable_battery = true;     % Toggle battery system
-params.enable_slack = true;        % Toggle slack (unmet demand penalty)
-params.enable_curtailment = true;  % Toggle curtailment limits (independent of battery)
+params.enable_slack = true;        % Toggle unmet demand
+params.enable_curtailment = false;  % Toggle curtailment limits
 params.objective_type = 'economic';  % Choose: 'economic' (cost minimization) or 'environmental' (GHG minimization)
 % ================================================
 
 % Technical
 params.dt_h = 1.0;
-params.x_pv_ub = 50; % max is 50 kWp
+params.x_pv_ub = 100; % max is 100 kWp
 
 % Economics
 params.discount_rate = 0.06;
@@ -52,13 +52,13 @@ params.eta_dis = sqrt(0.93);                % Discharging efficiency (same as ch
 params.soc_min = 0.10;                      % Min state-of-charge (10%)
 params.soc_max = 0.90;                      % Max state-of-charge (90%)
 params.soc0 = 0.50;                         % Initial SOC
-params.soc_tolerance = 10e3;                % Cyclic tolerance (kWh)
-params.E_bess_ub = 1 * 10e3;              % Battery energy upper bound (kWh)
+params.soc_tolerance = 10;                % Cyclic tolerance (kWh)
+params.E_bess_ub = 1000;              % Battery energy upper bound (kWh)
 
 % Economics
 params.c_bess_E_capex_per_kWh = 0.3;         % Battery capex (EUR/kWh)
 params.c_bess_E_fom_per_kWh_yr = params.c_bess_E_capex_per_kWh*0.04;          % Battery FOM (EUR/kWh/year)
-params.max_curtail_pct = 0.10;              % Max annual curtailment (10% of load)
+params.max_curtail_pct = 0.10;              % Max annual curtailment as fraction of load
 % ==============================================================
 
 
@@ -110,9 +110,7 @@ if params.enable_curtailment
     constraint_registry = [constraint_registry, {@bind_curtailment}];
 end
 
-tic
 result_50 = build_problem(data, params, constraint_registry, objective_registry);
-elapsed = toc;
 
 %% Visualization
 fprintf('\nGenerating visualization...\n')
@@ -139,16 +137,13 @@ if ~strcmp(result_50.status, 'infeasible or error')
     
     % --- EMISSIONS BREAKDOWN ---
     emissions_breakdown = struct();
-    
     % PV emissions
     emissions_breakdown.pv = params.ghg_intensity_pv_per_unit * result_50.x_pv;
-
     % Battery emissions
     emissions_breakdown.batt = 0;
     if params.enable_battery && isfield(result_50, 'E_bess')
         emissions_breakdown.batt = params.ghg_intensity_batt_per_kWh * result_50.E_bess;
     end
-    
     emissions_breakdown.total = emissions_breakdown.pv + emissions_breakdown.batt;
     
     % --- CALCULATE LCOE AND CARBON INTENSITY ---
@@ -156,7 +151,6 @@ if ~strcmp(result_50.status, 'infeasible or error')
     annual_energy_kWh = sum(data.P_load) * params.dt_h;
     % LCOE in EUR/kWh = annual cost / annual energy (energy systems only, excluding heat)
     lcoe_eur_per_kwh = (cost_breakdown.pv + cost_breakdown.batt) / (annual_energy_kWh);
-    
     % Carbon intensity in kg CO2-eq/kWh = lifecycle emissions / (annual demand * project life)
     lifetime_energy_kWh = annual_energy_kWh * params.project_life;
     carbon_intensity_kg_per_kwh = (emissions_breakdown.pv + emissions_breakdown.batt) / (lifetime_energy_kWh);
@@ -169,7 +163,6 @@ if ~strcmp(result_50.status, 'infeasible or error')
     if params.enable_battery && isfield(result_50, 'E_bess')
         fprintf('  Battery storage: %.2e kWh\n', result_50.E_bess);
     end
-    
     fprintf('\n--- COST BREAKDOWN (Annual, EUR) ---\n');
     fprintf('  PV:        %.2f\n', cost_breakdown.pv);
     if params.enable_battery
@@ -183,7 +176,6 @@ if ~strcmp(result_50.status, 'infeasible or error')
         fprintf('  Battery:   %.2f\n', emissions_breakdown.batt / 1e3);
     end
     fprintf('  TOTAL:     %.2f\n', emissions_breakdown.total / 1e3);
-
     fprintf('  Carbon Intensity: %.4f kg CO2-eq/kWh\n', carbon_intensity_kg_per_kwh);
     fprintf('====================================================================\n\n');
     

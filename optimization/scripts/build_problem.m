@@ -1,22 +1,21 @@
 function result = build_problem(data, params, constraint_registry, objective_registry)
     % BUILD_PROBLEM Main optimization orchestrator with battery support
     
-    vars.x_pv = sdpvar(1, 1); 
+    vars.x_pv = sdpvar(1, 1);
 
     T = numel(data.P_load); 
     vars.slack = sdpvar(T, 1);    % Unmet demand per hour [kW]
+    vars.p_curt = sdpvar(T, 1);          % Curtailment [kW] 
     
     %% Create battery variables if enabled
     battery_enabled = isfield(params, 'enable_battery') && params.enable_battery;
     
     if battery_enabled
         vars.E_bess = sdpvar(1, 1);        % Decision variable
-        
         vars.p_ch = sdpvar(T, 1);            % Charging power per hour [kW]
         vars.p_dis = sdpvar(T, 1);           % Discharging power per hour [kW]
         vars.e_stored = sdpvar(T+1, 1);      % Stored energy progression [kWh]
         vars.z = binvar(T, 1);               % Charge mode binary: 1=charge, 0=discharge
-        vars.p_curt = sdpvar(T, 1);          % Curtailment [kW]
     end
 
     %% Initialize constraints with variable bounds

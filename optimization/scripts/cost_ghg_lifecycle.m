@@ -3,7 +3,7 @@ function ghg = cost_ghg_lifecycle(vars, data, params)
     %
     % Computes lifecycle greenhouse gas emissions (kg CO2-eq/year):
     %   - PV manufacturing & disposal (per inverter unit)
-    %   - Battery manufacturing & disposal (per Wh of storage capacity)
+    %   - Battery manufacturing & disposal (per kWh of storage capacity)
     %
     % Assumptions:
     %   - All intensities are per unit or per energy/power unit
@@ -18,10 +18,10 @@ function ghg = cost_ghg_lifecycle(vars, data, params)
     end
     
     % ========== BATTERY EMISSIONS ==========
-    % Intensity: kg CO2-eq per Wh of storage capacity
+    % Intensity: kg CO2-eq per kWh of storage capacity
     if isfield(vars, 'E_bess')
-        ghg_intensity_batt_per_wh = get_param_or_default(params, 'ghg_intensity_batt_per_wh', 1);
-        ghg = ghg + ghg_intensity_batt_per_wh * vars.E_bess;
+        ghg_intensity_batt_per_kWh = get_param_or_default(params, 'ghg_intensity_batt_per_kWh', 1);
+        ghg = ghg + ghg_intensity_batt_per_kWh * vars.E_bess;
     end
 end
 
