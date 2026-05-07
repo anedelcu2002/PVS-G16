@@ -4,20 +4,8 @@ function constraints = bind_curtailment(vars, data, params)
     % Independent of battery - can be used standalone
     % Enforces:
     %   - Can only curtail what's available: p_curt(t) <= x_pv*P_solar(t)
-    %   - Annual curtailment limit: sum(p_curt) * dt_h <= max_curtail_pct * E_load_annual
     %
     % Skipped if curtailment variable p_curt doesn't exist (no battery in ED mode).
-
-    if ~isfield(params, 'enable_curtailment') || ~params.enable_curtailment
-        constraints = [];
-        return;
-    end
-    
-    % Only applies if curtailment variable exists (battery enabled)
-    if ~isfield(vars, 'p_curt')
-        constraints = [];
-        return;
-    end
     
     T = numel(data.P_load);
     dt_h = params.dt_h;

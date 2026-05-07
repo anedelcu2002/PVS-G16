@@ -3,32 +3,11 @@ function constraints = bind_power_balance(vars, data, params)
     
     T = numel(data.P_load);
     constraint_list = [];
-    battery_enabled = isfield(params, 'enable_battery') && params.enable_battery;
-    slack_enabled = isfield(params, 'enable_slack') && params.enable_slack;
     
     for t = 1:T
-        if battery_enabled
-            % Power balance with battery dispatch
-            if slack_enabled
-                balance = (vars.x_pv * data.P_solar_unit(t) + ...
-                            vars.p_dis(t) + vars.slack(t) == ...
-                            data.P_load(t) + vars.p_ch(t) + vars.p_curt(t));
-            else
-                balance = (vars.x_pv * data.P_solar_unit(t) + ...
-                            vars.p_dis(t) == ...
-                            data.P_load(t) + vars.p_ch(t) + vars.p_curt(t));
-            end
-        else
-            % MVP mode without battery
-            if slack_enabled
-                % With slack (feasibility valve)
-                balance = (vars.x_pv * data.P_solar_unit(t) + ...
-                          vars.slack(t) >= data.P_load(t));
-            else
-                % Strict renewables (no slack)
-                balance = (vars.x_pv * data.P_solar_unit(t) >= data.P_load(t));
-            end
-        end
+        balance = (vars.x_pv * data.P_solar_unit(t) + ...
+                    vars.p_dis(t) + vars.slack(t) == ...
+                    data.P_load(t) + vars.p_ch(t) + vars.p_curt(t));
         
         if t == 1
             constraint_list = balance;

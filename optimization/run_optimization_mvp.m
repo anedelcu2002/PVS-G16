@@ -9,14 +9,10 @@ elec_tbl = readtable('Year 2026 Load Calculation.xlsx','Sheet','Sheet1');
 P_load = elec_tbl{:, 2}; % hourly load in kW
 
 %% Load the initial solar profile
-solarCsvPath = fullfile(projectRoot, "solar_profiles_1_inverter.csv");
-
 solar_tbl = readtable('renewables_ninja_1_kw.csv');
 Solar1 = solar_tbl.electricity; % hourly solar generation in kW   
 
 %% Optimization
-
-% set data
 data = struct( ...
     'P_load', P_load, ...
     'P_solar_unit', Solar1 ...
@@ -26,9 +22,6 @@ data = struct( ...
 params = struct();
 
 % ============== SYSTEM TOGGLES ==============
-params.enable_battery = true;     % Toggle battery system
-params.enable_slack = true;        % Toggle unmet demand
-params.enable_curtailment = false;  % Toggle curtailment limits
 params.objective_type = 'economic';  % Choose: 'economic' (cost minimization) or 'environmental' (GHG minimization)
 % ================================================
 
@@ -53,7 +46,7 @@ params.soc_min = 0.10;                      % Min state-of-charge (10%)
 params.soc_max = 0.90;                      % Max state-of-charge (90%)
 params.soc0 = 0.50;                         % Initial SOC
 params.soc_tolerance = 10;                % Cyclic tolerance (kWh)
-params.E_bess_ub = 1000;              % Battery energy upper bound (kWh)
+params.E_bess_ub = 300;              % Battery energy upper bound (kWh)
 
 % Economics
 params.c_bess_E_capex_per_kWh = 0.3;         % Battery capex (EUR/kWh)
@@ -85,10 +78,7 @@ constraint_registry = {@bind_power_balance};
 if strcmp(params.objective_type, 'economic')
     % Economic optimization: minimize cost
     objective_registry = {@default_objective, @cost_slack};
-    
-    if params.enable_battery
-        objective_registry = [objective_registry, {@cost_battery}];
-    end
+    objective_registry = [objective_registry, {@cost_battery}];
 elseif strcmp(params.objective_type, 'environmental')
     % Environmental optimization: minimize GHG emissions (embedded only)
     objective_registry = {@cost_ghg_lifecycle, @cost_slack};
@@ -98,17 +88,13 @@ else
 end
 
 % Add battery constraints if enabled
-if params.enable_battery
-    constraint_registry = [constraint_registry, ...
-        {@bind_battery_dynamics, ...
-         @bind_battery_soc, ...
-         @bind_battery_exclusivity}];
-end
+constraint_registry = [constraint_registry, ...
+    {@bind_battery_dynamics, ...
+        @bind_battery_soc, ...
+        @bind_battery_exclusivity}];
 
 % Add curtailment constraint if enabled (independent of battery)
-if params.enable_curtailment
-    constraint_registry = [constraint_registry, {@bind_curtailment}];
-end
+constraint_registry = [constraint_registry, {@bind_curtailment}];
 
 result_50 = build_problem(data, params, constraint_registry, objective_registry);
 
@@ -128,10 +114,8 @@ if ~strcmp(result_50.status, 'infeasible or error')
     
     % Battery cost
     cost_breakdown.batt = 0;
-    if params.enable_battery && isfield(result_50, 'E_bess')
-        cost_breakdown.batt = CRF * params.c_bess_E_capex_per_kWh * result_50.E_bess + ...
-                              params.c_bess_E_fom_per_kWh_yr * result_50.E_bess;
-    end
+    cost_breakdown.batt = CRF * params.c_bess_E_capex_per_kWh * result_50.E_bess + ...
+                            params.c_bess_E_fom_per_kWh_yr * result_50.E_bess;
     
     cost_breakdown.total = cost_breakdown.pv + cost_breakdown.batt;
     
@@ -141,9 +125,7 @@ if ~strcmp(result_50.status, 'infeasible or error')
     emissions_breakdown.pv = params.ghg_intensity_pv_per_unit * result_50.x_pv;
     % Battery emissions
     emissions_breakdown.batt = 0;
-    if params.enable_battery && isfield(result_50, 'E_bess')
-        emissions_breakdown.batt = params.ghg_intensity_batt_per_kWh * result_50.E_bess;
-    end
+    emissions_breakdown.batt = params.ghg_intensity_batt_per_kWh * result_50.E_bess;
     emissions_breakdown.total = emissions_breakdown.pv + emissions_breakdown.batt;
     
     % --- CALCULATE LCOE AND CARBON INTENSITY ---
@@ -160,21 +142,15 @@ if ~strcmp(result_50.status, 'infeasible or error')
     fprintf('Objective: %s\n', params.objective_type);
     fprintf('\n--- SYSTEM CAPACITIES ---\n');
     fprintf('  PV panels: %.2f kWp\n', result_50.x_pv);
-    if params.enable_battery && isfield(result_50, 'E_bess')
-        fprintf('  Battery storage: %.2e kWh\n', result_50.E_bess);
-    end
+    fprintf('  Battery storage: %.2e kWh\n', result_50.E_bess);
     fprintf('\n--- COST BREAKDOWN (Annual, EUR) ---\n');
     fprintf('  PV:        %.2f\n', cost_breakdown.pv);
-    if params.enable_battery
-        fprintf('  Battery:   %.2f\n', cost_breakdown.batt);
-    end
+    fprintf('  Battery:   %.2f\n', cost_breakdown.batt);
     fprintf('  TOTAL:     %.2f\n', cost_breakdown.total);
     fprintf('  LCOE (Levelized Cost of Energy): %.4f EUR/kWh\n', lcoe_eur_per_kwh);
     fprintf('\n--- GHG EMISSIONS BREAKDOWN (Life-cycle, Tons CO2-eq) ---\n');
     fprintf('  PV:        %.2f\n', emissions_breakdown.pv / 1e3);
-    if params.enable_battery
-        fprintf('  Battery:   %.2f\n', emissions_breakdown.batt / 1e3);
-    end
+    fprintf('  Battery:   %.2f\n', emissions_breakdown.batt / 1e3);
     fprintf('  TOTAL:     %.2f\n', emissions_breakdown.total / 1e3);
     fprintf('  Carbon Intensity: %.4f kg CO2-eq/kWh\n', carbon_intensity_kg_per_kwh);
     fprintf('====================================================================\n\n');
@@ -219,24 +195,12 @@ supply_components.solar = result_50.x_pv * data.P_solar_unit / 1e3;  % Convert t
 demand_components.load = data.P_load / 1e3;  % Convert to MW
 
 % Handle battery if enabled
-if isfield(result_50, 'p_dis')
-    supply_components.batt_dis = result_50.p_dis / 1e3;  % Battery discharge in MW
-else
-    supply_components.batt_dis = zeros(T, 1);
-end
+supply_components.batt_dis = result_50.p_dis / 1e3;  % Battery discharge in MW
 
-if isfield(result_50, 'p_ch')
-    demand_components.batt_ch = result_50.p_ch / 1e3;  % Battery charge in MW
-else
-    demand_components.batt_ch = zeros(T, 1);
-end
+demand_components.batt_ch = result_50.p_ch / 1e3;  % Battery charge in MW
 
 % Handle slack
-if any(isnan(result_50.slack))
-    supply_components.slack = zeros(size(result_50.slack)) / 1e3;
-else
-    supply_components.slack = result_50.slack / 1e3;
-end
+supply_components.slack = result_50.slack / 1e3;
 
 total_met_demand = supply_components.solar + supply_components.batt_dis;
 total_unmet_demand = supply_components.slack;
@@ -354,62 +318,56 @@ legend('Location', 'best');
 grid on;
 
 % --- WEEKLY DISPATCH DETAIL (Renewables, Battery, Curtailment) ---
-if isfield(result_50, 'p_ch')
-    fig5 = figure('Name', 'Weekly Dispatch Detail - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 1000 600], 'WindowStyle', 'docked');
-    
-    hours_week_range = 1:numel(hours_week);
-    
-    hold on;
-    % Stacked supply sources
-    bar(hours_week_range, supply_components.solar(hours_week_range), 'FaceColor', '#FDB462', 'EdgeColor', 'none', 'DisplayName', 'Solar');
-    bar(hours_week_range, supply_components.batt_dis(hours_week_range), 'FaceColor', '#8DD3C7', 'EdgeColor', 'none', 'DisplayName', 'Battery Discharge');
-    
-    % Battery charge (negative bars)
-    bar(hours_week_range, -demand_components.batt_ch(hours_week_range), 'FaceColor', '#FB8072', 'EdgeColor', 'none', 'DisplayName', 'Battery Charge');
-    
-    % Curtailment/Excess as a line
-    plot(hours_week_range, supply_components.excess(hours_week_range), 'mo-', 'LineWidth', 1.5, 'MarkerSize', 4, 'DisplayName', 'Curtailment');
-    
-    hold off;
-    xlabel('Hour of Week 1'); 
-    ylabel('Power (MW)');
-    title(sprintf('First Week Dispatch Detail (SOC0 = 50%%)\n%s', titleSuffix));
-    legend('Location', 'best');
-    grid on;
-    yline(0, 'k--', 'LineWidth', 0.5);
-end
+fig5 = figure('Name', 'Weekly Dispatch Detail - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 1000 600], 'WindowStyle', 'docked');
+
+hours_week_range = 1:numel(hours_week);
+
+hold on;
+% Stacked supply sources
+bar(hours_week_range, supply_components.solar(hours_week_range), 'FaceColor', '#FDB462', 'EdgeColor', 'none', 'DisplayName', 'Solar');
+bar(hours_week_range, supply_components.batt_dis(hours_week_range), 'FaceColor', '#8DD3C7', 'EdgeColor', 'none', 'DisplayName', 'Battery Discharge');
+
+% Battery charge (negative bars)
+bar(hours_week_range, -demand_components.batt_ch(hours_week_range), 'FaceColor', '#FB8072', 'EdgeColor', 'none', 'DisplayName', 'Battery Charge');
+
+% Curtailment/Excess as a line
+plot(hours_week_range, supply_components.excess(hours_week_range), 'mo-', 'LineWidth', 1.5, 'MarkerSize', 4, 'DisplayName', 'Curtailment');
+
+hold off;
+xlabel('Hour of Week 1'); 
+ylabel('Power (MW)');
+title(sprintf('First Week Dispatch Detail (SOC0 = 50%%)\n%s', titleSuffix));
+legend('Location', 'best');
+grid on;
+yline(0, 'k--', 'LineWidth', 0.5);
 
 % --- ANNUAL BATTERY STATE OF CHARGE ---
-if isfield(result_50, 'e_stored') && isfield(result_50, 'E_bess')
-    fig6 = figure('Name', 'Annual Battery State of Charge - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 800 600], 'WindowStyle', 'docked');
-    soc_annual = result_50.e_stored / result_50.E_bess;  % Normalize to 0-1 range
-    plot(0:T, soc_annual, 'LineWidth', 1.5, 'Color', '#0066FF');
-    hold on;
-    yline(params.soc_min, 'r--', 'LineWidth', 1.5, 'DisplayName', sprintf('Min SOC (%.0f%%)', params.soc_min*100));
-    yline(params.soc_max, 'g--', 'LineWidth', 1.5, 'DisplayName', sprintf('Max SOC (%.0f%%)', params.soc_max*100));
-    hold off;
-    xlabel('Hour of Year'); 
-    ylabel('State of Charge (SOC)');
-    title(sprintf('Annual Battery State of Charge (SOC0 = 50%%)\n%s', titleSuffix));
-    legend('Location', 'best');
-    grid on;
-    ylim([0 1]);
-end
+fig6 = figure('Name', 'Annual Battery State of Charge - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 800 600], 'WindowStyle', 'docked');
+soc_annual = result_50.e_stored / result_50.E_bess;  % Normalize to 0-1 range
+plot(0:T, soc_annual, 'LineWidth', 1.5, 'Color', '#0066FF');
+hold on;
+yline(params.soc_min, 'r--', 'LineWidth', 1.5, 'DisplayName', sprintf('Min SOC (%.0f%%)', params.soc_min*100));
+yline(params.soc_max, 'g--', 'LineWidth', 1.5, 'DisplayName', sprintf('Max SOC (%.0f%%)', params.soc_max*100));
+hold off;
+xlabel('Hour of Year'); 
+ylabel('State of Charge (SOC)');
+title(sprintf('Annual Battery State of Charge (SOC0 = 50%%)\n%s', titleSuffix));
+legend('Location', 'best');
+grid on;
+ylim([0 1]);
 
 % --- WEEKLY BATTERY STATE OF CHARGE ---
-if isfield(result_50, 'e_stored') && isfield(result_50, 'E_bess')
-    fig7 = figure('Name', 'Weekly Battery State of Charge - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 800 600], 'WindowStyle', 'docked');
-    soc_weekly = result_50.e_stored(1:numel(hours_week)+1) / result_50.E_bess;
-    plot(0:numel(hours_week), soc_weekly, 'LineWidth', 1.5, 'Color', '#0066FF');
-    hold on;
-    yline(params.soc_min, 'r--', 'LineWidth', 1.5, 'DisplayName', sprintf('Min SOC (%.0f%%)', params.soc_min*100));
-    yline(params.soc_max, 'g--', 'LineWidth', 1.5, 'DisplayName', sprintf('Max SOC (%.0f%%)', params.soc_max*100));
-    hold off;
-    xlabel('Hour of Week 1'); 
-    ylabel('State of Charge (SOC)');
-    title(sprintf('First Week Battery State of Charge (SOC0 = 50%%)\n%s', titleSuffix));
-    legend('Location', 'best');
-    grid on;
-    ylim([0 1]);
-end  % End of visualization block
+fig7 = figure('Name', 'Weekly Battery State of Charge - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 800 600], 'WindowStyle', 'docked');
+soc_weekly = result_50.e_stored(1:numel(hours_week)+1) / result_50.E_bess;
+plot(0:numel(hours_week), soc_weekly, 'LineWidth', 1.5, 'Color', '#0066FF');
+hold on;
+yline(params.soc_min, 'r--', 'LineWidth', 1.5, 'DisplayName', sprintf('Min SOC (%.0f%%)', params.soc_min*100));
+yline(params.soc_max, 'g--', 'LineWidth', 1.5, 'DisplayName', sprintf('Max SOC (%.0f%%)', params.soc_max*100));
+hold off;
+xlabel('Hour of Week 1'); 
+ylabel('State of Charge (SOC)');
+title(sprintf('First Week Battery State of Charge (SOC0 = 50%%)\n%s', titleSuffix));
+legend('Location', 'best');
+grid on;
+ylim([0 1]);
 

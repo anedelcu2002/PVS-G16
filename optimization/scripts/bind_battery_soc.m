@@ -1,11 +1,6 @@
 function constraints = bind_battery_soc(vars, data, params)
     % BIND_BATTERY_SOC State-of-charge limits and initialization
     
-    if ~isfield(params, 'enable_battery') || ~params.enable_battery
-        constraints = [];
-        return;
-    end
-    
     T = numel(data.P_load);
     soc_min = get_param_or_default(params, 'soc_min', 0.20);     % Minimum SOC (20%)
     soc_max = get_param_or_default(params, 'soc_max', 0.95);     % Maximum SOC (95%)

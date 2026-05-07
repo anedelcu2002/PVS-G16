@@ -6,11 +6,6 @@ function constraints = bind_battery_exclusivity(vars, data, params)
     %   - If z(t) = 0: can discharge (p_dis > 0), charge forced to 0
     % Uses Big-M constraints: p_ch <= P_max * z(t), p_dis <= P_max * (1 - z(t))
     
-    if ~isfield(params, 'enable_battery') || ~params.enable_battery
-        constraints = [];
-        return;
-    end
-    
     T = numel(data.P_load);
     c_rating = get_param_or_default(params, 'battery_c_rating', 0.5);  % C-rating (h^-1)
     E_bess_ub = get_param_or_default(params, 'E_bess_ub', 1e10);

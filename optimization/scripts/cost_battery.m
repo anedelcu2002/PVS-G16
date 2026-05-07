@@ -4,11 +4,6 @@ function obj = cost_battery(vars, data, params)
     % Computes annualized battery costs:
     %   - Capex: annualized capital cost via CRF
     %   - FOM: fixed annual operating & maintenance cost
-
-    if ~isfield(params, 'enable_battery') || ~params.enable_battery
-        obj = 0;
-        return;
-    end
     
     dt_h = params.dt_h;
     discount_rate = params.discount_rate;
