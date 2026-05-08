@@ -13,6 +13,8 @@ function result = build_problem(data, params, constraint_registry, objective_reg
     vars.p_dis = sdpvar(T, 1);           % Discharging power per hour [kW]
     vars.e_stored = sdpvar(T+1, 1);      % Stored energy progression [kWh]
     vars.z = binvar(T, 1);               % Charge mode binary: 1=charge, 0=discharge
+    vars.y_solar_load = sdpvar(T, 1);    % continuous gate in [0, 1]
+    vars.x_pv_gate = sdpvar(T, 1);       % effective PV capacity to load
 
     % Grid import and split charging
     vars.p_grid = sdpvar(T, 1);       % Grid import [kW]
@@ -23,6 +25,8 @@ function result = build_problem(data, params, constraint_registry, objective_reg
     x_pv_ub = get_param_or_default(params, 'x_pv_ub', 100);
     constraints = [0 <= vars.x_pv <= x_pv_ub];
     constraints = [constraints, 0 <= vars.slack];
+    constraints = [constraints, 0 <= vars.y_solar_load <= 1];
+    constraints = [constraints, 0 <= vars.x_pv_gate <= x_pv_ub];
     
     
     % Add battery bounds if enabled

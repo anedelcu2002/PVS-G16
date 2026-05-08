@@ -5,10 +5,11 @@ function constraints = bind_power_balance(vars, data, params)
     constraint_list = [];
     
     for t = 1:T
-        balance = (vars.x_pv * data.P_solar_unit(t) + ...
-           vars.p_dis(t) + vars.p_grid(t) + vars.slack(t) == ...
-           data.P_load(t) + vars.p_ch(t) + vars.p_curt(t));
-        
+        pv_to_load = vars.x_pv_gate(t) * data.P_solar_unit(t);
+
+        balance = (pv_to_load + ...
+            vars.p_dis(t) + vars.p_grid(t) + vars.slack(t) == ...
+            data.P_load(t) + vars.p_ch(t) + vars.p_curt(t));
         if t == 1
             constraint_list = balance;
         else

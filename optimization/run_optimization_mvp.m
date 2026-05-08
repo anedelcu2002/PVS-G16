@@ -36,12 +36,15 @@ params.x_pv_ub = 20; % max kWp
 params.battery_c_rating = 0.25;             % C-rating: 0.25 h^-1 means 4hr discharge
 params.eta_ch = sqrt(0.93);                 % Charging efficiency (round-trip loss: 0.93)
 params.eta_dis = sqrt(0.93);                % Discharging efficiency (same as charge)
-params.soc_min = 0.10;                      % Min state-of-charge (10%)
-params.soc_max = 0.90;                      % Max state-of-charge (90%)
+params.soc_min = 0.0;                      % Min state-of-charge (10%)
+params.soc_max = 1.0;                      % Max state-of-charge (90%)
 params.soc0 = 0.50;                         % Initial SOC
 params.soc_tolerance = 10;                % Cyclic tolerance (kWh)
 params.E_bess_ub = 100;              % Battery energy upper bound (kWh)
 params.E_bess_lb = 0;
+params.soc_solar_allow = 0.95;
+params.soc_big_m = params.E_bess_ub; % safe scale
+
 
 % Economics
 params.discount_rate = 0.06;
@@ -81,7 +84,8 @@ constraint_registry = {@bind_power_balance, ...
         @bind_battery_exclusivity, ...
         @bind_curtailment, ...
         @bind_grid_charging, ...
-        @bind_grid_availability};
+        @bind_grid_availability, ...
+        @bind_solar_to_load_soc};
 
 % Select objective based on objective_type
 if strcmp(params.objective_type, 'economic')
