@@ -8,7 +8,7 @@ function constraints = bind_battery_exclusivity(vars, data, params)
     
     T = numel(data.P_load);
     c_rating = get_param_or_default(params, 'battery_c_rating', 0.5);  % C-rating (h^-1)
-    E_bess_ub = get_param_or_default(params, 'E_bess_ub', 1e10);
+    E_bess_ub = get_param_or_default(params, 'E_bess_ub', 1000);
     P_bess_ub = E_bess_ub * c_rating;  % Max power upper bound for Big-M
     
     constraint_list = [];

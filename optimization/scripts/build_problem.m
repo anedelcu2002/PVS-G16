@@ -1,13 +1,12 @@
 function result = build_problem(data, params, constraint_registry, objective_registry)
     % BUILD_PROBLEM Main optimization orchestrator with battery support
-    
+ 
+    %% Create variables
     vars.x_pv = sdpvar(1, 1);
 
     T = numel(data.P_load); 
     vars.slack = sdpvar(T, 1);    % Unmet demand per hour [kW]
     vars.p_curt = sdpvar(T, 1);          % Curtailment [kW] 
-    
-    %% Create battery variables if enabled
     
     vars.E_bess = sdpvar(1, 1);        % Decision variable
     vars.p_ch = sdpvar(T, 1);            % Charging power per hour [kW]
@@ -15,21 +14,33 @@ function result = build_problem(data, params, constraint_registry, objective_reg
     vars.e_stored = sdpvar(T+1, 1);      % Stored energy progression [kWh]
     vars.z = binvar(T, 1);               % Charge mode binary: 1=charge, 0=discharge
 
+    % Grid import and split charging
+    vars.p_grid = sdpvar(T, 1);       % Grid import [kW]
+    vars.p_ch_solar = sdpvar(T, 1);   % Battery charge from solar [kW]
+    vars.p_ch_grid = sdpvar(T, 1);    % Battery charge from grid [kW]
+
     %% Initialize constraints with variable bounds
-    x_pv_ub = get_param_or_default(params, 'x_pv_ub', 1000);
+    x_pv_ub = get_param_or_default(params, 'x_pv_ub', 100);
     constraints = [0 <= vars.x_pv <= x_pv_ub];
     constraints = [constraints, 0 <= vars.slack];
     
     
     % Add battery bounds if enabled
-    E_bess_ub = get_param_or_default(params, 'E_bess_ub', 1e10);
-    constraints = [constraints, 0 <= vars.E_bess <= E_bess_ub];
+    E_bess_lb = get_param_or_default(params, 'E_bess_lb', 300);
+    E_bess_ub = get_param_or_default(params, 'E_bess_ub', 500);
+    constraints = [constraints, E_bess_lb <= vars.E_bess <= E_bess_ub];
     
     constraints = [constraints, ...
+                    0 <= vars.p_grid, ...
+                    0 <= vars.p_ch_solar, ...
+                    0 <= vars.p_ch_grid, ...
                     0 <= vars.p_ch, ...
                     0 <= vars.p_dis, ...
                     0 <= vars.p_curt, ...
                     0 <= vars.e_stored];
+
+    % Link total charge to split components
+    constraints = [constraints, vars.p_ch == vars.p_ch_solar + vars.p_ch_grid];
     
     %% Apply registered constraints
     if ~isempty(constraint_registry)
@@ -83,6 +94,11 @@ function result = build_problem(data, params, constraint_registry, objective_reg
         result.p_curt = value(vars.p_curt);
         result.E_battery_annual = params.dt_h * sum(result.p_dis);
         result.E_curt_annual = params.dt_h * sum(result.p_curt);
+
+        % Add grid results
+        result.p_grid = value(vars.p_grid);
+        result.p_ch_solar = value(vars.p_ch_solar);
+        result.p_ch_grid = value(vars.p_ch_grid);
         
         % Renewable energy system sizing
         fprintf('RENEWABLE ENERGY SYSTEM SIZING:\n');
@@ -99,6 +115,9 @@ function result = build_problem(data, params, constraint_registry, objective_reg
             result.E_battery_annual, 100 * result.E_battery_annual / result.E_load_annual);
         fprintf('  Curtailment:         %.2e kWh (%.1f%% of generation)\n', ...
             result.E_curt_annual, 100 * result.E_curt_annual / (result.E_pv_annual));
+        result.E_grid_annual = params.dt_h * sum(result.p_grid);
+        fprintf('  Grid import:      %.2e kWh (%.1f%% of demand)\n', ...
+            result.E_grid_annual, 100 * result.E_grid_annual / result.E_load_annual);
         fprintf('  Unmet demand (slack):%.2e kWh (%.1f%%)\n', result.E_slack_annual, result.slack_percent);
         
         % Cost summary
