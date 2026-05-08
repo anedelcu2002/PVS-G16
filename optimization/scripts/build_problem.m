@@ -66,6 +66,10 @@ function result = build_problem(data, params, constraint_registry, objective_reg
     
     %% Solve optimization problem
     opts = sdpsettings('solver', 'gurobi', 'verbose', 1, 'gurobi.TimeLimit', 300);
+
+    fprintf('Solving MVP optimization problem...\n')
+    fprintf('\n')
+
     diagnostics = optimize(constraints, objective, opts);
     
     %% Package results

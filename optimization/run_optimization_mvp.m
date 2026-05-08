@@ -36,14 +36,14 @@ params.x_pv_ub = 20; % max kWp
 params.battery_c_rating = 0.25;             % C-rating: 0.25 h^-1 means 4hr discharge
 params.eta_ch = sqrt(0.93);                 % Charging efficiency (round-trip loss: 0.93)
 params.eta_dis = sqrt(0.93);                % Discharging efficiency (same as charge)
-params.soc_min = 0.0;                      % Min state-of-charge (10%)
-params.soc_max = 1.0;                      % Max state-of-charge (90%)
-params.soc0 = 0.50;                         % Initial SOC
-params.soc_tolerance = 10;                % Cyclic tolerance (kWh)
-params.E_bess_ub = 100;              % Battery energy upper bound (kWh)
+params.soc_min = 0.0;                       % Min state-of-charge (10%)
+params.soc_max = 1.0;                       % Max state-of-charge (90%)
+params.soc0 = 0.95;                         % Initial SOC
+params.soc_tolerance = 10;                  % Cyclic tolerance (kWh)
+params.E_bess_ub = 100;                     % Battery energy upper bound (kWh)
 params.E_bess_lb = 0;
 params.soc_solar_allow = 0.95;
-params.soc_big_m = params.E_bess_ub; % safe scale
+params.soc_big_m = params.E_bess_ub;        % safe scale
 
 
 % Economics
@@ -74,7 +74,7 @@ fprintf('  Max possible gen: %.2e kW\n', ...
     params.x_pv_ub*max(data.P_solar_unit));
 fprintf('  Peak load: %.2e kW\n', max(data.P_load));
 
-fprintf('Solving MVP optimization problem...\n')
+fprintf('Building MVP optimization problem...\n')
 fprintf('\n')
 
 % Setup constraint and objective registries
@@ -144,11 +144,8 @@ if ~strcmp(result_50.status, 'infeasible or error')
     carbon_intensity_kg_per_kwh = (emissions_breakdown.pv + emissions_breakdown.batt) / (lifetime_energy_kWh);
     
     % ===== PRINT SUMMARY TO CONSOLE =====
-    fprintf('\n========== OPTIMIZATION RESULTS%% ==========\n');
+    fprintf('\n========== OPTIMIZATION RESULTS ==========\n');
     fprintf('Objective: %s\n', params.objective_type);
-    fprintf('\n--- SYSTEM CAPACITIES ---\n');
-    fprintf('  PV panels: %.2f kWp\n', result_50.x_pv);
-    fprintf('  Battery storage: %.2e kWh\n', result_50.E_bess);
     fprintf('\n--- COST BREAKDOWN (Annual, EUR) ---\n');
     fprintf('  PV:        %.2f\n', cost_breakdown.pv);
     fprintf('  Grid:      %.2f\n', cost_breakdown.grid);
@@ -197,20 +194,20 @@ supply_components = struct();
 demand_components = struct();
 
 % Current generation sources
-supply_components.solar = result_50.x_pv * data.P_solar_unit / 1e3;  % Convert to MW
+supply_components.solar = result_50.x_pv * data.P_solar_unit;  % kW
 
 % Demand breakdown
-demand_components.load = data.P_load / 1e3;  % Convert to MW
+demand_components.load = data.P_load;  % kW
 
 % Handle battery if enabled
-supply_components.batt_dis = result_50.p_dis / 1e3;  % Battery discharge in MW
-demand_components.batt_ch = result_50.p_ch / 1e3;  % Battery charge in MW
+supply_components.batt_dis = result_50.p_dis;  % Battery discharge in kW
+demand_components.batt_ch = result_50.p_ch;  % Battery charge in kW
 
 % Add grid import to supply components
-supply_components.grid = result_50.p_grid / 1e3;  % Grid import in MW
+supply_components.grid = result_50.p_grid;  % Grid import in kW
 
 % Handle slack
-supply_components.slack = result_50.slack / 1e3;
+supply_components.slack = result_50.slack;  % kW
 
 % Update met demand to include grid
 total_met_demand = supply_components.solar + supply_components.batt_dis + supply_components.grid;
@@ -255,12 +252,12 @@ end
 fig1 = figure('Name', 'Weekly Supply-Demand Balance (Cumulative) - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 1000 600], 'WindowStyle', 'docked');
 hold on;
 
-% Create stacked bar chart showing power balance (convert to MWh)
+% Create stacked bar chart showing power balance (kWh)
 % Positive side: generation sources
 % Negative side: battery charging demand
 week_numbers = 1:weeks_in_year;
-weekly_supply = [weekly_solar, weekly_batt_dis, weekly_grid] / 1000;  % kWh -> MWh
-weekly_demand_components = [-weekly_batt_ch, weekly_slack] / 1000;  % Convert kWh to MWh
+weekly_supply = [weekly_solar, weekly_batt_dis, weekly_grid];  % kWh
+weekly_demand_components = [-weekly_batt_ch, weekly_slack];  % kWh
 
 % Plot supply sources (positive)
 h_Supply = bar(week_numbers, weekly_supply, 'stacked', 'EdgeColor', 'none');
@@ -275,63 +272,22 @@ h_Demand = bar(week_numbers, weekly_demand_components, 'stacked', 'EdgeColor', '
 h_Demand(1).FaceColor = '#FC8d62';  % Battery Charge (reddish, different from discharge)
 h_Demand(2).FaceColor = '#984EA3';  % Unmet (Slack) - purple, distinct from battery discharge
 
-% Overlay weekly load demand as a line (convert to MWh)
+% Overlay weekly load demand as a line (kWh)
 hold on;
-h_line = plot(week_numbers, weekly_demand / 1000, 'ko-', 'LineWidth', 2, 'MarkerSize', 5, 'DisplayName', 'Weekly Load');
+h_line = plot(week_numbers, weekly_demand, 'ko-', 'LineWidth', 2, 'MarkerSize', 5, 'DisplayName', 'Weekly Load');
 
 % Add zero reference line (exclude from legend)
 yline(0, 'k-', 'LineWidth', 0.5, 'HandleVisibility', 'off');
 
 hold off;
 xlabel('Week of Year'); 
-ylabel('Energy (MWh)');
+ylabel('Energy (kWh)');
 title(sprintf('Weekly Power Balance - Cumulative (SOC0 = 50%%)\n%s', titleSuffix));
 legend([h_Supply(1), h_Supply(2), h_Supply(3), h_Demand(1), h_Demand(2), h_line], ...
     {'Solar', 'Battery Discharge', 'Grid', 'Battery Charge', 'Unmet (Slack)', 'Weekly Load'}, ...
     'Location', 'best');
 grid on;
 xticks(1:2:weeks_in_year);
-
-% --- ANNUAL STACKED SUPPLY ---
-fig2 = figure('Name', 'Annual Generation Mix - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 800 600], 'WindowStyle', 'docked');
-hold on;
-area(hours_all, supply_components.solar, 'FaceColor', '#FDB462', 'EdgeColor', 'none', 'DisplayName', 'Solar');
-area(hours_all, supply_components.batt_dis, 'FaceColor', '#8DD3C7', 'EdgeColor', 'none', 'DisplayName', 'Battery Discharge');
-area(hours_all, supply_components.grid, 'FaceColor', '#E6E6E6', 'EdgeColor', 'none', 'DisplayName', 'Grid');
-area(hours_all, supply_components.excess, 'FaceColor', '#BEBADA', 'EdgeColor', 'none', 'DisplayName', 'Excess (Unused)');
-area(hours_all, supply_components.slack, 'FaceColor', '#FB8072', 'EdgeColor', 'none', 'DisplayName', 'Unmet');
-hold off;
-xlabel('Hour of Year'); ylabel('Power (MW)');
-title(sprintf('Annual Generation Mix (SOC0 = 50%%)\n%s', titleSuffix));
-legend('Location', 'best');
-grid on;
-
-% --- WEEKLY SUPPLY-DEMAND BALANCE ---
-fig3 = figure('Name', 'Weekly Supply-Demand Balance - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 800 600], 'WindowStyle', 'docked');
-hold on;
-fill(hours_week, demand_components.load(1:numel(hours_week)), 'k', 'FaceAlpha', 0.2, 'EdgeColor', 'none', 'DisplayName', 'Total Demand');
-fill(hours_week, total_met_demand(1:numel(hours_week)), 'g', 'FaceAlpha', 0.3, 'EdgeColor', 'none', 'DisplayName', 'Met Demand');
-fill(hours_week, total_unmet_demand(1:numel(hours_week)), 'r', 'FaceAlpha', 0.4, 'EdgeColor', 'none', 'DisplayName', 'Unmet Demand');
-plot(hours_week, total_generation(1:numel(hours_week)), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Total Generation');
-hold off;
-xlabel('Hour of Week 1'); ylabel('Power (MW)');
-title(sprintf('First Week Supply-Demand Balance (SOC0 = 50%%)\n%s', titleSuffix));
-legend('Location', 'best');
-grid on;
-
-% --- WEEKLY STACKED SUPPLY ---
-fig4 = figure('Name', 'Weekly Generation Mix - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 800 600], 'WindowStyle', 'docked');
-hold on;
-area(hours_week, supply_components.solar(1:numel(hours_week)), 'FaceColor', '#FDB462', 'EdgeColor', 'none', 'DisplayName', 'Solar');
-area(hours_week, supply_components.batt_dis(1:numel(hours_week)), 'FaceColor', '#8DD3C7', 'EdgeColor', 'none', 'DisplayName', 'Battery Discharge');
-area(hours_week, supply_components.grid(1:numel(hours_week)), 'FaceColor', '#E6E6E6', 'EdgeColor', 'none', 'DisplayName', 'Grid');
-area(hours_week, supply_components.excess(1:numel(hours_week)), 'FaceColor', '#BEBADA', 'EdgeColor', 'none', 'DisplayName', 'Excess (Unused)');
-area(hours_week, supply_components.slack(1:numel(hours_week)), 'FaceColor', '#FB8072', 'EdgeColor', 'none', 'DisplayName', 'Unmet');
-hold off;
-xlabel('Hour of Week 1'); ylabel('Power (MW)');
-title(sprintf('First Week Generation Mix (SOC0 = 50%%)\n%s', titleSuffix));
-legend('Location', 'best');
-grid on;
 
 % --- WEEKLY DISPATCH DETAIL (Renewables, Battery, Curtailment, Slack) ---
 fig5 = figure('Name', 'Weekly Dispatch Detail - SOC0 = 50%', 'NumberTitle', 'off', ...
@@ -341,16 +297,16 @@ hours_week_range = 1:numel(hours_week);
 
 % Use gated PV if available; fall back to ungated PV
 if isfield(result_50, 'x_pv_gate') && ~isempty(result_50.x_pv_gate)
-    solar_to_load = (result_50.x_pv_gate .* data.P_solar_unit) / 1e3; % MW
+    solar_to_load = (result_50.x_pv_gate .* data.P_solar_unit); % kW
 else
-    solar_to_load = (result_50.x_pv .* data.P_solar_unit) / 1e3; % MW
+    solar_to_load = (result_50.x_pv .* data.P_solar_unit); % kW
 end
 
-batt_dis = result_50.p_dis / 1e3;  % MW
-grid_imp = result_50.p_grid / 1e3; % MW
-slack_mw = result_50.slack / 1e3;  % MW
-batt_ch = result_50.p_ch / 1e3;    % MW
-load_mw = data.P_load / 1e3;       % MW
+batt_dis = result_50.p_dis;  % kW
+grid_imp = result_50.p_grid; % kW
+slack_mw = result_50.slack;  % kW
+batt_ch = result_50.p_ch;    % kW
+load_mw = data.P_load;       % kW
 
 hold on;
 
@@ -379,7 +335,7 @@ plot(hours_week_range, supply_components.excess(hours_week_range), 'mo-', ...
 
 hold off;
 xlabel('Hour of Week 1');
-ylabel('Power (MW)');
+ylabel('Power (kW)');
 title(sprintf('First Week Dispatch Detail (SOC0 = 50%%)\n%s', titleSuffix));
 legend([h_supply(1), h_supply(2), h_supply(3), h_supply(4), h_ch], ...
     {'Solar (Gated)', 'Battery Discharge', 'Grid', 'Unmet (Slack)', 'Battery Charge'}, ...
