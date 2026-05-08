@@ -20,8 +20,7 @@ kB = 1.38e-23;
 q  = 1.6e-19;
 T  = 298;
 
-%% ================= MODULE DATA =================
-
+%% ================= MODULE PARAMETERS =================
 % LONGi
 modules(1).name = 'LONGi';
 modules(1).NOCT = 45;
@@ -31,30 +30,30 @@ modules(1).gamma_P = -0.0029;
 
 modules(1).Voc = 52.51;
 modules(1).Isc = 14.33;
-modules(1).Voc_coeff = -0.13;   % V/°C (FIXED UNIT)
+modules(1).Voc_coeff = -0.0013;   % V/°C (FIXED UNIT)
 modules(1).Isc_coeff = 0.005;   % A/°C
 
 modules(1).Vmpp = 44.36;
 modules(1).Impp = 13.31;
 
-modules(1).Ns = 72; %Not Sure
-modules(1).FF = 44.36*13.31/(52.51*14.33); %Not Sure
+modules(1).Ns = 106; %Not Sure
+modules(1).FF = 44.36*13.31/(52.51*14.33); 
 % AIKO
 modules(2).name = 'AIKO';
 modules(2).NOCT = 45;
-modules(2).Area = 2;
+modules(2).Area = 1.998;
 modules(2).eta_STC = 0.24;
 modules(2).gamma_P = -0.0026;
 
-modules(2).Voc = 41;
-modules(2).Isc = 14.84;
-modules(2).Voc_coeff = -0.12;
-modules(2).Isc_coeff = 0.0045;
+modules(2).Voc = 40.90;
+modules(2).Isc = 14.80;
+modules(2).Voc_coeff = -0.0022;
+modules(2).Isc_coeff = 0.005;
 
 modules(2).Vmpp = 34.5;
 modules(2).Impp = 13.92;
 modules(2).Ns = 62; %Not Sure
-modules(2).FF = 32.73*11.13/(11.96*38.80);
+modules(2).FF = 34.50*13.92/(40.90*14.80);
 
 %% ================= STORAGE =================
 N = length(G_POA);
