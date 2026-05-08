@@ -32,7 +32,7 @@ modules(1).gamma_P = -0.0029;
 modules(1).Voc = 52.51;
 modules(1).Isc = 14.33;
 modules(1).Voc_coeff = -0.0013;   % V/°C (FIXED UNIT)
-modules(1).Isc_coeff = 0.005;   % A/°C
+modules(1).Isc_coeff = 0.0005;   % A/°C
 
 modules(1).Vmpp = 44.36;
 modules(1).Impp = 13.31;
