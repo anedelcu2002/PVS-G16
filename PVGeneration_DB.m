@@ -20,6 +20,8 @@ kB = 1.38e-23;
 q  = 1.6e-19;
 T  = 298;
 
+%% ================= MODULE DATA =================
+
 % LONGi
 modules(1).name = 'LONGi';
 modules(1).NOCT = 45;
@@ -30,7 +32,7 @@ modules(1).gamma_P = -0.0029;
 modules(1).Voc = 52.51;
 modules(1).Isc = 14.33;
 modules(1).Voc_coeff = -0.0013;   % V/°C (FIXED UNIT)
-modules(1).Isc_coeff = 0.005;   % A/°C
+modules(1).Isc_coeff = 0.0005;   % A/°C
 
 modules(1).Vmpp = 44.36;
 modules(1).Impp = 13.31;
@@ -88,7 +90,7 @@ for m = 1:2
     
     FF = modules(m).FF;
     Ns = modules(m).Ns;
-    
+  
     %% -------- DUFFIE --------
     tau_alpha = 0.9;
     
@@ -185,13 +187,28 @@ end
 %% ================= WEEKLY PLOT =================
 figure;
 
+% ===== BAR PLOT =====
 bar(1:n_weeks, [weekly_LONGi weekly_AIKO], 'grouped');
+hold on;
+
+% ===== MOVING AVERAGE =====
+window = 4; % moving average window (weeks)
+
+LONGi_mov = movmean(weekly_LONGi, window);
+AIKO_mov  = movmean(weekly_AIKO, window);
+
+% ===== PLOT MOVING AVERAGE =====
+plot(1:n_weeks, LONGi_mov, 'r', 'LineWidth', 2);
+plot(1:n_weeks, AIKO_mov, 'g', 'LineWidth', 2);
 
 xlabel('Week Number');
 ylabel('Energy (kWh)');
 title('Weekly PV Generation');
 
-legend('LONGi','AIKO','Location','best');
+legend('LONGi Weekly', 'AIKO Weekly', ...
+       'LONGi Moving Avg', 'AIKO Moving Avg', ...
+       'Location', 'best');
+
 grid on;
 
 %% ================= OPTIONAL EXPORT =================

@@ -20,7 +20,8 @@ kB = 1.38e-23;
 q  = 1.6e-19;
 T  = 298;
 
-%% ================= MODULE PARAMETERS =================
+%% ================= MODULE DATA =================
+
 % LONGi
 modules(1).name = 'LONGi';
 modules(1).NOCT = 45;
@@ -48,7 +49,7 @@ modules(2).gamma_P = -0.0026;
 modules(2).Voc = 40.90;
 modules(2).Isc = 14.80;
 modules(2).Voc_coeff = -0.0022;
-modules(2).Isc_coeff = 0.005;
+modules(2).Isc_coeff = 0.0005;
 
 modules(2).Vmpp = 34.5;
 modules(2).Impp = 13.92;
@@ -184,12 +185,25 @@ end
 figure;
 
 bar(1:n_weeks, [weekly_LONGi weekly_AIKO], 'grouped');
+hold on;
+
+% ===== MOVING AVERAGE =====
+window = 4; % 4-week moving average
+
+LONGi_mov = movmean(weekly_LONGi, window);
+AIKO_mov  = movmean(weekly_AIKO, window);
+
+plot(1:n_weeks, LONGi_mov, 'r', 'LineWidth', 2);
+plot(1:n_weeks, AIKO_mov, 'g', 'LineWidth', 2);
 
 xlabel('Week Number');
 ylabel('Energy (kWh)');
 title('Weekly PV Generation');
 
-legend('LONGi','AIKO','Location','best');
+legend('LONGi Weekly','AIKO Weekly', ...
+       'LONGi Moving Avg','AIKO Moving Avg', ...
+       'Location','best');
+
 grid on;
 
 %% ================= OPTIONAL EXPORT =================
@@ -204,3 +218,5 @@ E_total = sum(G_8760);
 fprintf('\n--- ANNUAL GENERATION ---\n');
 fprintf('LONGi: %.2f kWh\n', E_total(1));
 fprintf('AIKO : %.2f kWh\n', E_total(2));
+
+Control = P_DC_var .* modules(2).eta_STC .* G_POA
