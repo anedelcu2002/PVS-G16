@@ -81,6 +81,7 @@ function result = build_problem(data, params, constraint_registry, objective_reg
         result.x_pv = value(vars.x_pv);
         result.slack = value(vars.slack);
         result.cost = value(objective);
+        result.x_pv_gate = value(vars.x_pv_gate);
         
         % Calculate energy metrics
         result.E_pv_annual = result.x_pv * sum(data.P_solar_unit) * params.dt_h;

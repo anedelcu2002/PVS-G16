@@ -10,7 +10,7 @@ P_load = elec_tbl{:, 2}; % hourly load in kW
 
 %% Load the initial solar profile
 solar_tbl = readtable('renewables_ninja_1_kw.csv');
-Solar1 = solar_tbl.electricity; % hourly solar generation in kW   
+Solar1 = solar_tbl.Var3; % hourly solar generation in kW   
 
 %% Load blackout profile
 blackout_tbl = readtable('Year 2026 Load Calculation.xlsx','Sheet','Y1 Load Profile 3');
@@ -85,7 +85,8 @@ constraint_registry = {@bind_power_balance, ...
         @bind_curtailment, ...
         @bind_grid_charging, ...
         @bind_grid_availability, ...
-        @bind_solar_to_load_soc};
+        @bind_solar_to_load_soc,
+        };
 
 % Select objective based on objective_type
 if strcmp(params.objective_type, 'economic')
@@ -332,29 +333,57 @@ title(sprintf('First Week Generation Mix (SOC0 = 50%%)\n%s', titleSuffix));
 legend('Location', 'best');
 grid on;
 
-% --- WEEKLY DISPATCH DETAIL (Renewables, Battery, Curtailment) ---
-fig5 = figure('Name', 'Weekly Dispatch Detail - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 1000 600], 'WindowStyle', 'docked');
+% --- WEEKLY DISPATCH DETAIL (Renewables, Battery, Curtailment, Slack) ---
+fig5 = figure('Name', 'Weekly Dispatch Detail - SOC0 = 50%', 'NumberTitle', 'off', ...
+              'Position', [center_x center_y 1000 600], 'WindowStyle', 'docked');
 
 hours_week_range = 1:numel(hours_week);
 
+% Use gated PV if available; fall back to ungated PV
+if isfield(result_50, 'x_pv_gate') && ~isempty(result_50.x_pv_gate)
+    solar_to_load = (result_50.x_pv_gate .* data.P_solar_unit) / 1e3; % MW
+else
+    solar_to_load = (result_50.x_pv .* data.P_solar_unit) / 1e3; % MW
+end
+
+batt_dis = result_50.p_dis / 1e3;  % MW
+grid_imp = result_50.p_grid / 1e3; % MW
+slack_mw = result_50.slack / 1e3;  % MW
+batt_ch = result_50.p_ch / 1e3;    % MW
+load_mw = data.P_load / 1e3;       % MW
+
 hold on;
-% Stacked supply sources
-bar(hours_week_range, supply_components.solar(hours_week_range), 'FaceColor', '#FDB462', 'EdgeColor', 'none', 'DisplayName', 'Solar');
-bar(hours_week_range, supply_components.batt_dis(hours_week_range), 'FaceColor', '#8DD3C7', 'EdgeColor', 'none', 'DisplayName', 'Battery Discharge');
 
-% Battery charge (negative bars)
-bar(hours_week_range, -demand_components.batt_ch(hours_week_range), 'FaceColor', '#FB8072', 'EdgeColor', 'none', 'DisplayName', 'Battery Charge');
+% Stacked positive supply (solar, batt, grid, slack)
+supply_stack = [solar_to_load(hours_week_range), ...
+                batt_dis(hours_week_range), ...
+                grid_imp(hours_week_range), ...
+                slack_mw(hours_week_range)];
+h_supply = bar(hours_week_range, supply_stack, 'stacked', 'EdgeColor', 'none');
+h_supply(1).FaceColor = '#FDB462';  % Solar
+h_supply(2).FaceColor = '#8DD3C7';  % Battery Discharge
+h_supply(3).FaceColor = '#80B1D3';  % Grid
+h_supply(4).FaceColor = '#FB8072';  % Slack
 
-bar(hours_week_range, supply_components.grid(hours_week_range), 'FaceColor', '#80B1D3', 'EdgeColor', 'none', 'DisplayName', 'Grid');
+% Battery charge as negative bars
+h_ch = bar(hours_week_range, -batt_ch(hours_week_range), 'FaceColor', '#FC8D62', ...
+           'EdgeColor', 'none', 'DisplayName', 'Battery Charge');
+
+% Load line
+plot(hours_week_range, load_mw(hours_week_range), 'k-', 'LineWidth', 1.5, ...
+     'DisplayName', 'Load');
 
 % Curtailment/Excess as a line
-plot(hours_week_range, supply_components.excess(hours_week_range), 'mo-', 'LineWidth', 1.5, 'MarkerSize', 4, 'DisplayName', 'Curtailment');
+plot(hours_week_range, supply_components.excess(hours_week_range), 'mo-', ...
+     'LineWidth', 1.2, 'MarkerSize', 3, 'DisplayName', 'Curtailment');
 
 hold off;
-xlabel('Hour of Week 1'); 
+xlabel('Hour of Week 1');
 ylabel('Power (MW)');
 title(sprintf('First Week Dispatch Detail (SOC0 = 50%%)\n%s', titleSuffix));
-legend('Location', 'best');
+legend([h_supply(1), h_supply(2), h_supply(3), h_supply(4), h_ch], ...
+    {'Solar (Gated)', 'Battery Discharge', 'Grid', 'Unmet (Slack)', 'Battery Charge'}, ...
+    'Location', 'best');
 grid on;
 yline(0, 'k--', 'LineWidth', 0.5);
 
