@@ -50,13 +50,15 @@ params.soc_big_m = params.E_bess_ub;        % safe scale
 
 
 % Economics
-params.discount_rate = 0.06;
-params.project_life = 4;
+params.discount_rate = 0;
+params.project_life = 3;
 params.c_pv_unit_capex = 900;           % /kWp
 params.c_pv_unit_fom_per_year = 5;      % /kWp/year
 params.c_bess_E_capex_per_kWh = 250;         % Battery capex (EUR/kWh)
 params.c_bess_E_fom_per_kWh_yr = params.c_bess_E_capex_per_kWh*0.04;          % Battery FOM (EUR/kWh/year)
 
+params.slack_hourly_penalty_eur = 112.5;
+params.slack_big_m = max(P_load) + 1; % safe big-M (kW)
 
 
 params.grid_price_eur_per_kwh = 0.2;
@@ -131,6 +133,8 @@ if ~strcmp(result_50.status, 'infeasible or error')
                             params.c_bess_E_fom_per_kWh_yr * result_50.E_bess;
     
     cost_breakdown.total = cost_breakdown.pv + cost_breakdown.batt + cost_breakdown.grid;
+    cost_breakdown.slack = params.slack_hourly_penalty_eur * result_50.slack_hours;
+    cost_breakdown.total = cost_breakdown.total + cost_breakdown.slack;
     
     % --- EMISSIONS BREAKDOWN ---
     emissions_breakdown = struct();
@@ -163,6 +167,7 @@ if ~strcmp(result_50.status, 'infeasible or error')
     fprintf('  North-facing PV:  %.2f\n', cost_breakdown.pv_2);
     fprintf('  Battery:          %.2f\n', cost_breakdown.batt);
     fprintf('  Grid:             %.2f\n', cost_breakdown.grid);
+    fprintf('  Slack hours penalty: %.2f\n', cost_breakdown.slack);
     fprintf('  TOTAL:            %.2f\n', cost_breakdown.total);
     fprintf('  LCOE (Levelized Cost of Energy): %.4f EUR/kWh\n', lcoe_eur_per_kwh);
     
@@ -242,7 +247,8 @@ titleSuffix = sprintf('MVP System Sizing: S-PV=%.0f kWp, N-PV=%.0f kWp, Batt=%.0
 % Aggregate hourly data by week
 weeks_in_year = ceil(T / 168);
 weekly_demand = zeros(weeks_in_year, 1);
-weekly_solar = zeros(weeks_in_year, 1);
+weekly_solar_1 = zeros(weeks_in_year, 1);
+weekly_solar_2 = zeros(weeks_in_year, 1);
 weekly_batt_dis = zeros(weeks_in_year, 1);
 weekly_batt_ch = zeros(weeks_in_year, 1);
 weekly_slack = zeros(weeks_in_year, 1);
@@ -252,7 +258,8 @@ for w = 1:weeks_in_year
     start_idx = (w-1) * 168 + 1;
     end_idx = min(w * 168, T);
     weekly_demand(w) = sum(demand_components.load(start_idx:end_idx));
-    weekly_solar(w) = sum(supply_components.solar(start_idx:end_idx));  % Total solar
+    weekly_solar_1(w) = sum(supply_components.solar_1(start_idx:end_idx));
+    weekly_solar_2(w) = sum(supply_components.solar_2(start_idx:end_idx));
     weekly_batt_dis(w) = sum(supply_components.batt_dis(start_idx:end_idx));
     weekly_batt_ch(w) = sum(demand_components.batt_ch(start_idx:end_idx));
     weekly_slack(w) = sum(supply_components.slack(start_idx:end_idx));
@@ -266,16 +273,16 @@ hold on;
 % Positive side: generation sources
 % Negative side: battery charging demand
 week_numbers = 1:weeks_in_year;
-weekly_supply = [weekly_solar, weekly_batt_dis, weekly_grid];  % kWh
+weekly_supply = [weekly_solar_1, weekly_solar_2, weekly_batt_dis, weekly_grid];  % kWh
 weekly_demand_components = [-weekly_batt_ch, weekly_slack];  % kWh
 
 % Plot supply sources (positive)
 h_Supply = bar(week_numbers, weekly_supply, 'stacked', 'EdgeColor', 'none');
 
-% Assign colors to supply components
-h_Supply(1).FaceColor = '#FDB462';  % Solar
-h_Supply(2).FaceColor = '#8DD3C7';  % Battery Discharge
-h_Supply(3).FaceColor = '#80B1D3';  % Grid
+h_Supply(1).FaceColor = '#FDB462';  % Solar South
+h_Supply(2).FaceColor = '#B3DE69';  % Solar North
+h_Supply(3).FaceColor = '#8DD3C7';  % Battery Discharge
+h_Supply(4).FaceColor = '#80B1D3';  % Grid
 
 % Plot demand components on same bars (battery charge as negative, slack as positive continuation)
 h_Demand = bar(week_numbers, weekly_demand_components, 'stacked', 'EdgeColor', 'none');
@@ -293,8 +300,8 @@ hold off;
 xlabel('Week of Year'); 
 ylabel('Energy (kWh)');
 title(sprintf('Weekly Power Balance - Cumulative (SOC0 = 50%%)\n%s', titleSuffix));
-legend([h_Supply(1), h_Supply(2), h_Supply(3), h_Demand(1), h_Demand(2), h_line], ...
-    {'Solar', 'Battery Discharge', 'Grid', 'Battery Charge', 'Unmet (Slack)', 'Weekly Load'}, ...
+legend([h_Supply(1), h_Supply(2), h_Supply(3), h_Supply(4), h_Demand(1), h_Demand(2), h_line], ...
+    {'Solar (South)', 'Solar (North)', 'Battery Discharge', 'Grid', 'Battery Charge', 'Unmet (Slack)', 'Weekly Load'}, ...
     'Location', 'best');
 grid on;
 xticks(1:2:weeks_in_year);
@@ -305,13 +312,14 @@ fig5 = figure('Name', 'Weekly Dispatch Detail - SOC0 = 50%', 'NumberTitle', 'off
 
 hours_week_range = 1:numel(hours_week);
 
-% Use gated PV if available; fall back to ungated PV
+% Use gated PV if available; fall back to ungated PV (split by array)
 if isfield(result_50, 'x_pv_gate_1') && ~isempty(result_50.x_pv_gate_1) && ...
         isfield(result_50, 'x_pv_gate_2') && ~isempty(result_50.x_pv_gate_2)
-    solar_to_load = (result_50.x_pv_gate_1 .* data.P_solar_unit) + ...
-                    (result_50.x_pv_gate_2 .* data.P_solar_unit_2); % kW (total)
+    solar1_to_load = (result_50.x_pv_gate_1 .* data.P_solar_unit);   % South
+    solar2_to_load = (result_50.x_pv_gate_2 .* data.P_solar_unit_2); % North
 else
-    solar_to_load = result_50.solar; % Fall back to total computed in supply_components
+    solar1_to_load = supply_components.solar_1;
+    solar2_to_load = supply_components.solar_2;
 end
 
 batt_dis = result_50.p_dis;  % kW
@@ -322,16 +330,19 @@ load_mw = data.P_load;       % kW
 
 hold on;
 
-% Stacked positive supply (solar, batt, grid, slack)
-supply_stack = [solar_to_load(hours_week_range), ...
+% Stacked positive supply (solar1, solar2, batt, grid, slack)
+supply_stack = [solar1_to_load(hours_week_range), ...
+                solar2_to_load(hours_week_range), ...
                 batt_dis(hours_week_range), ...
                 grid_imp(hours_week_range), ...
                 slack_mw(hours_week_range)];
 h_supply = bar(hours_week_range, supply_stack, 'stacked', 'EdgeColor', 'none');
-h_supply(1).FaceColor = '#FDB462';  % Solar
-h_supply(2).FaceColor = '#8DD3C7';  % Battery Discharge
-h_supply(3).FaceColor = '#80B1D3';  % Grid
-h_supply(4).FaceColor = '#FB8072';  % Slack
+
+h_supply(1).FaceColor = '#FDB462';  % South-facing solar
+h_supply(2).FaceColor = '#B3DE69';  % North-facing solar
+h_supply(3).FaceColor = '#8DD3C7';  % Battery Discharge
+h_supply(4).FaceColor = '#80B1D3';  % Grid
+h_supply(5).FaceColor = '#FB8072';  % Slack
 
 % Battery charge as negative bars
 h_ch = bar(hours_week_range, -batt_ch(hours_week_range), 'FaceColor', '#FC8D62', ...
@@ -341,6 +352,15 @@ h_ch = bar(hours_week_range, -batt_ch(hours_week_range), 'FaceColor', '#FC8D62',
 plot(hours_week_range, load_mw(hours_week_range), 'k-', 'LineWidth', 1.5, ...
      'DisplayName', 'Load');
 
+% Overlay slack hours as markers on the load line
+if isfield(result_50, 'u_slack') && ~isempty(result_50.u_slack)
+    slack_idx = hours_week_range(result_50.u_slack(hours_week_range) > 0);
+    if ~isempty(slack_idx)
+        plot(slack_idx, load_mw(slack_idx), 'rx', 'MarkerSize', 6, ...
+             'LineWidth', 1.2, 'DisplayName', 'Slack hours');
+    end
+end
+
 % Curtailment/Excess as a line
 plot(hours_week_range, supply_components.excess(hours_week_range), 'mo-', ...
      'LineWidth', 1.2, 'MarkerSize', 3, 'DisplayName', 'Curtailment');
@@ -349,38 +369,81 @@ hold off;
 xlabel('Hour of Week 1');
 ylabel('Power (kW)');
 title(sprintf('First Week Dispatch Detail (SOC0 = 50%%)\n%s', titleSuffix));
-legend([h_supply(1), h_supply(2), h_supply(3), h_supply(4), h_ch], ...
-    {'Solar (Gated)', 'Battery Discharge', 'Grid', 'Unmet (Slack)', 'Battery Charge'}, ...
+legend([h_supply(1), h_supply(2), h_supply(3), h_supply(4), h_supply(5), h_ch, h_line], ...
+    {'Solar (South)', 'Solar (North)', 'Battery Discharge', 'Grid', 'Unmet (Slack)', 'Battery Charge', 'Load'}, ...
     'Location', 'best');
 grid on;
 yline(0, 'k--', 'LineWidth', 0.5);
 
-% --- WEEKLY SOLAR BREAKDOWN (South vs North) ---
-fig_solar = figure('Name', 'Weekly Solar Generation Breakdown - SOC0 = 50%', 'NumberTitle', 'off', ...
-    'Position', [center_x center_y 1000 600], 'WindowStyle', 'docked');
+% --- ANNUAL DISPATCH DETAIL (Same style as weekly) ---
+fig5b = figure('Name', 'Annual Dispatch Detail - SOC0 = 50%', 'NumberTitle', 'off', ...
+               'Position', [center_x center_y 1000 600], 'WindowStyle', 'docked');
 
-weekly_solar_1 = zeros(weeks_in_year, 1);
-weekly_solar_2 = zeros(weeks_in_year, 1);
+hours_all_range = 1:T;
 
-for w = 1:weeks_in_year
-    start_idx = (w-1) * 168 + 1;
-    end_idx = min(w * 168, T);
-    weekly_solar_1(w) = sum(supply_components.solar_1(start_idx:end_idx));
-    weekly_solar_2(w) = sum(supply_components.solar_2(start_idx:end_idx));
+% Use gated PV if available; fall back to ungated PV (split by array)
+if isfield(result_50, 'x_pv_gate_1') && ~isempty(result_50.x_pv_gate_1) && ...
+        isfield(result_50, 'x_pv_gate_2') && ~isempty(result_50.x_pv_gate_2)
+    solar1_to_load_all = (result_50.x_pv_gate_1 .* data.P_solar_unit);   % South
+    solar2_to_load_all = (result_50.x_pv_gate_2 .* data.P_solar_unit_2); % North
+else
+    solar1_to_load_all = supply_components.solar_1;
+    solar2_to_load_all = supply_components.solar_2;
 end
 
-week_numbers = 1:weeks_in_year;
-solar_stack = [weekly_solar_1, weekly_solar_2];
-h_solar = bar(week_numbers, solar_stack, 'stacked', 'EdgeColor', 'none');
-h_solar(1).FaceColor = '#FDB462';  % South-facing (warmer)
-h_solar(2).FaceColor = '#B3DE69';  % North-facing (cooler)
+batt_dis_all = result_50.p_dis;
+grid_imp_all = result_50.p_grid;
+slack_mw_all = result_50.slack;
+batt_ch_all = result_50.p_ch;
+load_mw_all = data.P_load;
 
-xlabel('Week of Year');
-ylabel('Energy (kWh)');
-title('Weekly Solar Generation: South-facing vs North-facing (SOC0 = 50%)');
-legend({'South-facing PV', 'North-facing PV'}, 'Location', 'best');
+hold on;
+
+% Stacked positive supply (solar1, solar2, batt, grid, slack)
+supply_stack_all = [solar1_to_load_all(hours_all_range), ...
+                    solar2_to_load_all(hours_all_range), ...
+                    batt_dis_all(hours_all_range), ...
+                    grid_imp_all(hours_all_range), ...
+                    slack_mw_all(hours_all_range)];
+h_supply_all = bar(hours_all_range, supply_stack_all, 'stacked', 'EdgeColor', 'none');
+
+h_supply_all(1).FaceColor = '#FDB462';  % South-facing solar
+h_supply_all(2).FaceColor = '#B3DE69';  % North-facing solar
+h_supply_all(3).FaceColor = '#8DD3C7';  % Battery Discharge
+h_supply_all(4).FaceColor = '#80B1D3';  % Grid
+h_supply_all(5).FaceColor = '#FB8072';  % Slack
+
+% Battery charge as negative bars
+h_ch_all = bar(hours_all_range, -batt_ch_all(hours_all_range), 'FaceColor', '#FC8D62', ...
+               'EdgeColor', 'none', 'DisplayName', 'Battery Charge');
+
+% Load line
+h_line_all = plot(hours_all_range, load_mw_all(hours_all_range), 'k-', 'LineWidth', 1.5, ...
+                  'DisplayName', 'Load');
+
+% Overlay slack hours as markers on the load line
+if isfield(result_50, 'u_slack') && ~isempty(result_50.u_slack)
+    slack_idx_all = hours_all_range(result_50.u_slack(hours_all_range) > 0);
+    if ~isempty(slack_idx_all)
+        plot(slack_idx_all, load_mw_all(slack_idx_all), 'rx', 'MarkerSize', 6, ...
+             'LineWidth', 1.2, 'DisplayName', 'Slack hours');
+    end
+end
+
+% Curtailment/Excess as a line
+plot(hours_all_range, supply_components.excess(hours_all_range), 'mo-', ...
+     'LineWidth', 1.2, 'MarkerSize', 3, 'DisplayName', 'Curtailment');
+
+hold off;
+xlabel('Hour of Year');
+ylabel('Power (kW)');
+title(sprintf('Annual Dispatch Detail (SOC0 = 50%%)\n%s', titleSuffix));
+legend([h_supply_all(1), h_supply_all(2), h_supply_all(3), h_supply_all(4), h_supply_all(5), h_ch_all, h_line_all], ...
+    {'Solar (South)', 'Solar (North)', 'Battery Discharge', 'Grid', 'Unmet (Slack)', 'Battery Charge', 'Load'}, ...
+    'Location', 'best');
 grid on;
-xticks(1:2:weeks_in_year);
+yline(0, 'k--', 'LineWidth', 0.5);
+
 
 % --- ANNUAL BATTERY STATE OF CHARGE ---
 fig6 = figure('Name', 'Annual Battery State of Charge - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 800 600], 'WindowStyle', 'docked');

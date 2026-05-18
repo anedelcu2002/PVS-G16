@@ -1,8 +1,14 @@
 function obj = cost_slack(vars, data, params)
-    % COST_SLACK Penalty for unmet demand (slack variable) - only if enabled
+    % COST_SLACK Fixed hourly penalty for any unmet demand
     
-    % Slack penalty when enabled
-    penalty_per_kWh = 10000000;
-    E_slack_kWh = sum(vars.slack) * params.dt_h;
-    obj = penalty_per_kWh * E_slack_kWh;
+    penalty_per_hour = get_param_or_default(params, 'slack_hourly_penalty_eur', 112.5);
+    obj = penalty_per_hour * sum(vars.u_slack);
+end
+
+function val = get_param_or_default(params, field, default)
+    if isfield(params, field)
+        val = params.(field);
+    else
+        val = default;
+    end
 end

@@ -10,8 +10,12 @@ function obj = cost_battery(vars, data, params)
     project_life = params.project_life;
     
     % Capital recovery factor for levelization
-    CRF = discount_rate * (1 + discount_rate)^project_life / ...
-          ((1 + discount_rate)^project_life - 1);
+    if discount_rate == 0
+        CRF = 1 / project_life;
+    else
+        CRF = discount_rate * (1 + discount_rate)^project_life / ...
+            ((1 + discount_rate)^project_life - 1);
+    end
     
     % Battery costs per kWh
     c_bess_E_capex = get_param_or_default(params, 'c_bess_E_capex_per_kWh', 0.1);      % $/kWh

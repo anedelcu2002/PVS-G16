@@ -8,6 +8,7 @@ function result = build_problem(data, params, constraint_registry, objective_reg
     T = numel(data.P_load); 
     vars.slack = sdpvar(T, 1);    % Unmet demand per hour [kW]
     vars.p_curt = sdpvar(T, 1);          % Curtailment [kW] 
+    vars.u_slack = binvar(T, 1);   % 1 if slack > 0 at hour t
     
     vars.E_bess = sdpvar(1, 1);        % Decision variable
     vars.p_ch = sdpvar(T, 1);            % Charging power per hour [kW]
@@ -30,11 +31,14 @@ function result = build_problem(data, params, constraint_registry, objective_reg
     constraints = [0 <= vars.x_pv <= x_pv_ub];
     constraints = [constraints, 0 <= vars.x_pv2 <= x_pv_ub];
     constraints = [constraints, 0 <= vars.slack];
+    constraints = [constraints, 0 <= vars.u_slack <= 1];
     constraints = [constraints, 0 <= vars.y_solar_load_total <= 1];
     constraints = [constraints, 0 <= vars.x_pv_gate_total <= x_pv_ub];
     constraints = [constraints, 0 <= vars.x_pv_gate_1 <= x_pv_ub];
     constraints = [constraints, 0 <= vars.x_pv_gate_2 <= x_pv_ub];
 
+    slack_big_m = get_param_or_default(params, 'slack_big_m', max(data.P_load) + 1);
+    constraints = [constraints, vars.slack <= slack_big_m * vars.u_slack];
 
     % Add battery bounds if enabled
     E_bess_lb = get_param_or_default(params, 'E_bess_lb', 300);
@@ -91,6 +95,8 @@ function result = build_problem(data, params, constraint_registry, objective_reg
         end
         result.x_pv = value(vars.x_pv);
         result.slack = value(vars.slack);
+        result.u_slack = value(vars.u_slack);
+        result.slack_hours = sum(result.u_slack);
         result.cost = value(objective);
         result.x_pv2 = value(vars.x_pv2);
         result.x_pv_gate_total = value(vars.x_pv_gate_total);
@@ -149,6 +155,7 @@ function result = build_problem(data, params, constraint_registry, objective_reg
         fprintf('  Grid import:         %.2e kWh (%.1f%% of demand)\n', ...
             result.E_grid_annual, 100 * result.E_grid_annual / result.E_load_annual);
         fprintf('  Unmet demand (slack):%.2e kWh (%.1f%%)\n', result.E_slack_annual, result.slack_percent);
+        fprintf('  Hours with unmet demand: %.0f hours\n', result.slack_hours);
         
         % Cost summary
         fprintf('\nECONOMIC OUTCOMES:\n');
@@ -162,8 +169,7 @@ function result = build_problem(data, params, constraint_registry, objective_reg
         % Compute CRF for annualization
         discount_rate = get_param_or_default(params, 'discount_rate', 0.05);
         project_life = get_param_or_default(params, 'project_life', 20);
-        CRF = discount_rate * (1 + discount_rate)^project_life / ...
-                ((1 + discount_rate)^project_life - 1);
+        CRF = compute_crf(discount_rate, project_life);
         
         % Cost breakdown by component
         fprintf('\nCOST BREAKDOWN (Annualized):\n');
