@@ -6,19 +6,27 @@ function constraints = bind_solar_to_load_soc(vars, data, params)
 
     constraint_list = [];
     for t = 1:T
-        % Soft SOC gate: if SOC < 95%, gate can still be >0 but is limited
-        c_soc = vars.y_solar_load(t) <= (vars.e_stored(t) - soc_allow * vars.E_bess + M) / M;
+        % Shared SOC gate for total PV-to-load capacity
+        c_soc = vars.y_solar_load_total(t) <= (vars.e_stored(t) - soc_allow * vars.E_bess + M) / M;
 
-        % McCormick envelope for x_pv_gate(t) = y_solar_load(t) * x_pv
-        c1 = vars.x_pv_gate(t) <= x_pv_ub * vars.y_solar_load(t);
-        c2 = vars.x_pv_gate(t) <= vars.x_pv;
-        c3 = vars.x_pv_gate(t) >= vars.x_pv - x_pv_ub * (1 - vars.y_solar_load(t));
-        c4 = vars.x_pv_gate(t) >= 0;
+        % McCormick envelope for x_pv_gate_total(t) = y_solar_load_total(t) * (x_pv + x_pv2)
+        x_pv_total = vars.x_pv + vars.x_pv2;
+        c1 = vars.x_pv_gate_total(t) <= x_pv_ub * vars.y_solar_load_total(t);
+        c2 = vars.x_pv_gate_total(t) <= x_pv_total;
+        c3 = vars.x_pv_gate_total(t) >= x_pv_total - x_pv_ub * (1 - vars.y_solar_load_total(t));
+        c4 = vars.x_pv_gate_total(t) >= 0;
+
+        % Split total gated capacity between arrays
+        c5 = vars.x_pv_gate_1(t) >= 0;
+        c6 = vars.x_pv_gate_2(t) >= 0;
+        c7 = vars.x_pv_gate_1(t) + vars.x_pv_gate_2(t) == vars.x_pv_gate_total(t);
+        c8 = vars.x_pv_gate_1(t) <= vars.x_pv;
+        c9 = vars.x_pv_gate_2(t) <= vars.x_pv2;
 
         if t == 1
-            constraint_list = [c_soc, c1, c2, c3, c4];
+            constraint_list = [c_soc, c1, c2, c3, c4, c5, c6, c7, c8, c9];
         else
-            constraint_list = [constraint_list, c_soc, c1, c2, c3, c4];
+            constraint_list = [constraint_list, c_soc, c1, c2, c3, c4, c5, c6, c7, c8, c9];
         end
     end
 

@@ -6,8 +6,9 @@ function constraints = bind_grid_charging(vars, data, params)
         % Disallow grid-to-battery
         c1 = (vars.p_ch_grid(t) == 0);
 
-        % Solar-only charging: cannot exceed available PV after curtailment
-        avail_pv = vars.x_pv * data.P_solar_unit(t);
+        % Solar-only charging: cannot exceed available PV (both arrays) after curtailment
+        avail_pv = vars.x_pv * data.P_solar_unit(t) + ...
+                   vars.x_pv2 * data.P_solar_unit_2(t);
         c2 = (vars.p_ch_solar(t) <= avail_pv - vars.p_curt(t));
 
         if t == 1

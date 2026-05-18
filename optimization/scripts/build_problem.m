@@ -3,6 +3,7 @@ function result = build_problem(data, params, constraint_registry, objective_reg
  
     %% Create variables
     vars.x_pv = sdpvar(1, 1);
+    vars.x_pv2 = sdpvar(1, 1);  
 
     T = numel(data.P_load); 
     vars.slack = sdpvar(T, 1);    % Unmet demand per hour [kW]
@@ -13,8 +14,11 @@ function result = build_problem(data, params, constraint_registry, objective_reg
     vars.p_dis = sdpvar(T, 1);           % Discharging power per hour [kW]
     vars.e_stored = sdpvar(T+1, 1);      % Stored energy progression [kWh]
     vars.z = binvar(T, 1);               % Charge mode binary: 1=charge, 0=discharge
-    vars.y_solar_load = sdpvar(T, 1);    % continuous gate in [0, 1]
-    vars.x_pv_gate = sdpvar(T, 1);       % effective PV capacity to load
+    vars.y_solar_load_total = sdpvar(T, 1);  % shared gate in [0, 1]
+    vars.x_pv_gate_total = sdpvar(T, 1);     % total gated PV capacity
+
+    vars.x_pv_gate_1 = sdpvar(T, 1);         % gated PV capacity for Solar1
+    vars.x_pv_gate_2 = sdpvar(T, 1);         % gated PV capacity for Solar2
 
     % Grid import and split charging
     vars.p_grid = sdpvar(T, 1);       % Grid import [kW]
@@ -24,11 +28,14 @@ function result = build_problem(data, params, constraint_registry, objective_reg
     %% Initialize constraints with variable bounds
     x_pv_ub = get_param_or_default(params, 'x_pv_ub', 100);
     constraints = [0 <= vars.x_pv <= x_pv_ub];
+    constraints = [constraints, 0 <= vars.x_pv2 <= x_pv_ub];
     constraints = [constraints, 0 <= vars.slack];
-    constraints = [constraints, 0 <= vars.y_solar_load <= 1];
-    constraints = [constraints, 0 <= vars.x_pv_gate <= x_pv_ub];
-    
-    
+    constraints = [constraints, 0 <= vars.y_solar_load_total <= 1];
+    constraints = [constraints, 0 <= vars.x_pv_gate_total <= x_pv_ub];
+    constraints = [constraints, 0 <= vars.x_pv_gate_1 <= x_pv_ub];
+    constraints = [constraints, 0 <= vars.x_pv_gate_2 <= x_pv_ub];
+
+
     % Add battery bounds if enabled
     E_bess_lb = get_param_or_default(params, 'E_bess_lb', 300);
     E_bess_ub = get_param_or_default(params, 'E_bess_ub', 500);
@@ -85,15 +92,18 @@ function result = build_problem(data, params, constraint_registry, objective_reg
         result.x_pv = value(vars.x_pv);
         result.slack = value(vars.slack);
         result.cost = value(objective);
-        result.x_pv_gate = value(vars.x_pv_gate);
-        
+        result.x_pv2 = value(vars.x_pv2);
+        result.x_pv_gate_total = value(vars.x_pv_gate_total);
+        result.x_pv_gate_1 = value(vars.x_pv_gate_1);
+        result.x_pv_gate_2 = value(vars.x_pv_gate_2);
         % Calculate energy metrics
-        result.E_pv_annual = result.x_pv * sum(data.P_solar_unit) * params.dt_h;
+        result.E_pv_annual = (result.x_pv * sum(data.P_solar_unit) + ...
+                              result.x_pv2 * sum(data.P_solar_unit_2)) * params.dt_h;
         result.E_load_annual = params.dt_h * sum(data.P_load);
         result.E_slack_annual = params.dt_h * sum(result.slack);
         result.pv_percent = 100 * result.E_pv_annual / result.E_load_annual;
         result.slack_percent = 100 * result.E_slack_annual / result.E_load_annual;
-        
+
         % Add battery results if enabled
         result.E_bess = value(vars.E_bess);
         result.p_ch = value(vars.p_ch);
@@ -103,6 +113,8 @@ function result = build_problem(data, params, constraint_registry, objective_reg
         result.p_curt = value(vars.p_curt);
         result.E_battery_annual = params.dt_h * sum(result.p_dis);
         result.E_curt_annual = params.dt_h * sum(result.p_curt);
+        result.E_pv1_annual = result.x_pv * sum(data.P_solar_unit) * params.dt_h;
+        result.E_pv2_annual = result.x_pv2 * sum(data.P_solar_unit_2) * params.dt_h;
 
         % Add grid results
         result.p_grid = value(vars.p_grid);
@@ -111,21 +123,30 @@ function result = build_problem(data, params, constraint_registry, objective_reg
         
         % Renewable energy system sizing
         fprintf('RENEWABLE ENERGY SYSTEM SIZING:\n');
-        fprintf('  PV:        %.4f kWp\n', result.x_pv);
+        fprintf('  South-facing PV:        %.4f kWp\n', result.x_pv);
+        fprintf('  North-facing PV:        %.4f kWp\n', result.x_pv2);
+        fprintf('  Total PV capacity:      %.4f kWp\n', result.x_pv + result.x_pv2);
         fprintf('  Battery capacity:    %.4f kWh\n', result.E_bess);
         fprintf('  Battery power (C-rate %.2f h⁻¹): %.4f kW\n', ...
             params.battery_c_rating, result.E_bess * params.battery_c_rating);
 
-        % Annual energy balance
+        % Annual energy balance by source
         fprintf('\nANNUAL ENERGY BALANCE:\n');
+        result.E_pv1_annual = result.x_pv * sum(data.P_solar_unit) * params.dt_h;
+        result.E_pv2_annual = result.x_pv2 * sum(data.P_solar_unit_2) * params.dt_h;
         fprintf('  Total demand:        %.2e kWh\n', result.E_load_annual);
-        fprintf('  PV generation:       %.2e kWh (%.1f%%)\n', result.E_pv_annual, result.pv_percent);
+        fprintf('  PV generation (South-facing): %.2e kWh (%.1f%%)\n', ...
+            result.E_pv1_annual, 100 * result.E_pv1_annual / result.E_load_annual);
+        fprintf('  PV generation (North-facing): %.2e kWh (%.1f%%)\n', ...
+            result.E_pv2_annual, 100 * result.E_pv2_annual / result.E_load_annual);
+        fprintf('  Total PV generation: %.2e kWh (%.1f%%)\n', ...
+            result.E_pv_annual, 100 * result.E_pv_annual / result.E_load_annual);
         fprintf('  Battery dispatch:    %.2e kWh (%.1f%% of demand)\n', ...
             result.E_battery_annual, 100 * result.E_battery_annual / result.E_load_annual);
         fprintf('  Curtailment:         %.2e kWh (%.1f%% of generation)\n', ...
-            result.E_curt_annual, 100 * result.E_curt_annual / (result.E_pv_annual));
+            result.E_curt_annual, 100 * result.E_curt_annual / result.E_pv_annual);
         result.E_grid_annual = params.dt_h * sum(result.p_grid);
-        fprintf('  Grid import:      %.2e kWh (%.1f%% of demand)\n', ...
+        fprintf('  Grid import:         %.2e kWh (%.1f%% of demand)\n', ...
             result.E_grid_annual, 100 * result.E_grid_annual / result.E_load_annual);
         fprintf('  Unmet demand (slack):%.2e kWh (%.1f%%)\n', result.E_slack_annual, result.slack_percent);
         
@@ -144,10 +165,24 @@ function result = build_problem(data, params, constraint_registry, objective_reg
         CRF = discount_rate * (1 + discount_rate)^project_life / ...
                 ((1 + discount_rate)^project_life - 1);
         
-        % PV costs (annualized capex + FOM)
-        cost_pv_capex_ann = CRF * result.x_pv * params.c_pv_unit_capex;
-        cost_pv_fom_ann = result.x_pv * params.c_pv_unit_fom_per_year;
-        cost_pv_ann = cost_pv_capex_ann + cost_pv_fom_ann;
+        % Cost breakdown by component
+        fprintf('\nCOST BREAKDOWN (Annualized):\n');
+        
+        % South-facing PV costs
+        cost_pv1_capex_ann = CRF * result.x_pv * params.c_pv_unit_capex;
+        cost_pv1_fom_ann = result.x_pv * params.c_pv_unit_fom_per_year;
+        cost_pv1_ann = cost_pv1_capex_ann + cost_pv1_fom_ann;
+        fprintf('  South-facing PV:     %.2e $/year\n', cost_pv1_ann);
+        
+        % North-facing PV costs
+        cost_pv2_capex_ann = CRF * result.x_pv2 * params.c_pv_unit_capex;
+        cost_pv2_fom_ann = result.x_pv2 * params.c_pv_unit_fom_per_year;
+        cost_pv2_ann = cost_pv2_capex_ann + cost_pv2_fom_ann;
+        fprintf('  North-facing PV:     %.2e $/year\n', cost_pv2_ann);
+        
+        % Total PV costs
+        cost_pv_total = cost_pv1_ann + cost_pv2_ann;
+        fprintf('  Total PV:            %.2e $/year\n', cost_pv_total);
         
         % Battery costs (annualized capex + FOM)
         c_bess_E_capex = get_param_or_default(params, 'c_bess_E_capex_per_kWh', 250);
@@ -156,11 +191,16 @@ function result = build_problem(data, params, constraint_registry, objective_reg
         cost_bess_fom_ann = c_bess_E_fom * result.E_bess;
         cost_bess_ann = cost_bess_capex_ann + cost_bess_fom_ann;
         
-        fprintf('    PV (annualized):   %.2e $/year\n', cost_pv_ann);
         fprintf('    Battery (annualized): %.2e $/year\n', cost_bess_ann);
         
         % Show breakdown percentages
-        total_capac_fom = cost_pv_ann + cost_bess_ann;
+        total_capac_fom = cost_pv_total + cost_bess_ann;
+
+        result.E_pv1_annual = result.x_pv * sum(data.P_solar_unit) * params.dt_h;
+        result.E_pv2_annual = result.x_pv2 * sum(data.P_solar_unit_2) * params.dt_h;
+        result.cost_pv1_ann = cost_pv1_ann;
+        result.cost_pv2_ann = cost_pv2_ann;
+        result.cost_pv_total = cost_pv_total;
         
         
         fprintf('    Capital & FOM subtotal: %.2e $/year\n', total_capac_fom);

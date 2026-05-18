@@ -14,7 +14,8 @@ function constraints = bind_curtailment(vars, data, params)
     % Hourly: cannot curtail more than available generation
     constraint_list = [];
     for t = 1:T
-        avail_gen = vars.x_pv * data.P_solar_unit(t);
+        avail_gen = vars.x_pv * data.P_solar_unit(t) + ...
+                    vars.x_pv2 * data.P_solar_unit_2(t);
         curt_ineq = vars.p_curt(t) <= avail_gen;
         
         if t == 1

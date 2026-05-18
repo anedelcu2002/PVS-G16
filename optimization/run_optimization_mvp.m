@@ -10,7 +10,8 @@ P_load = elec_tbl{:, 2}; % hourly load in kW
 
 %% Load the initial solar profile
 solar_tbl = readtable('renewables_ninja_1_kw.csv');
-Solar1 = solar_tbl.Var3; % hourly solar generation in kW   
+Solar1 = solar_tbl.Var3; % hourly solar generation in kW
+Solar2 = solar_tbl.Var3.*0.9; 
 
 %% Load blackout profile
 blackout_tbl = readtable('Year 2026 Load Calculation.xlsx','Sheet','Y1 Load Profile 3');
@@ -20,6 +21,7 @@ P_blackout = blackout_tbl{:, 10}; % hourly blackout indicator (1 if blackout, 0 
 data = struct( ...
     'P_load', P_load, ...
     'P_solar_unit', Solar1, ...
+    'P_solar_unit_2', Solar2, ...
     'P_blackout', P_blackout ...
 );
 
@@ -33,6 +35,7 @@ params.objective_type = 'economic';  % Choose: 'economic' (cost minimization) or
 % Technical
 params.dt_h = 1.0;
 params.x_pv_ub = 20; % max kWp
+params.x_pv2_ub = 20; % max kWp
 params.battery_c_rating = 0.25;             % C-rating: 0.25 h^-1 means 4hr discharge
 params.eta_ch = sqrt(0.93);                 % Charging efficiency (round-trip loss: 0.93)
 params.eta_dis = sqrt(0.93);                % Discharging efficiency (same as charge)
@@ -70,8 +73,9 @@ params.ghg_intensity_batt_per_kWh = 0.09;         % kg CO2-eq per kWh of battery
 fprintf('Data check before optimization:\n');
 fprintf('  P_load: min=%.2e, max=%.2e\n', min(data.P_load), max(data.P_load));
 fprintf('  P_solar_unit: min=%.2e, max=%.2e\n', min(data.P_solar_unit), max(data.P_solar_unit));
+fprintf('  P_solar_unit_2: min=%.2e, max=%.2e\n', min(data.P_solar_unit_2), max(data.P_solar_unit_2));
 fprintf('  Max possible gen: %.2e kW\n', ...
-    params.x_pv_ub*max(data.P_solar_unit));
+    params.x_pv_ub*max(data.P_solar_unit) + params.x_pv2_ub*max(data.P_solar_unit_2));
 fprintf('  Peak load: %.2e kW\n', max(data.P_load));
 
 fprintf('Building MVP optimization problem...\n')
@@ -111,10 +115,13 @@ if ~strcmp(result_50.status, 'infeasible or error')
     % --- COST BREAKDOWN ---
     cost_breakdown = struct();
     
-    % PV cost
+    % PV costs (both arrays)
     CRF = compute_crf(params.discount_rate, params.project_life);
-    cost_breakdown.pv = CRF * params.c_pv_unit_capex * result_50.x_pv + ...
-                        params.c_pv_unit_fom_per_year * result_50.x_pv;
+    cost_breakdown.pv_1 = CRF * params.c_pv_unit_capex * result_50.x_pv + ...
+                          params.c_pv_unit_fom_per_year * result_50.x_pv;
+    cost_breakdown.pv_2 = CRF * params.c_pv_unit_capex * result_50.x_pv2 + ...
+                          params.c_pv_unit_fom_per_year * result_50.x_pv2;
+    cost_breakdown.pv = cost_breakdown.pv_1 + cost_breakdown.pv_2;
 
     grid_energy_kwh = sum(result_50.p_grid) * params.dt_h;
     cost_breakdown.grid = params.grid_price_eur_per_kwh * grid_energy_kwh;
@@ -127,10 +134,10 @@ if ~strcmp(result_50.status, 'infeasible or error')
     
     % --- EMISSIONS BREAKDOWN ---
     emissions_breakdown = struct();
-    % PV emissions
-    emissions_breakdown.pv = params.ghg_intensity_pv_per_unit * result_50.x_pv;
+    % PV emissions (both arrays combined)
+    emissions_breakdown.pv = params.ghg_intensity_pv_per_unit * (result_50.x_pv + result_50.x_pv2);
+    
     % Battery emissions
-    emissions_breakdown.batt = 0;
     emissions_breakdown.batt = params.ghg_intensity_batt_per_kWh * result_50.E_bess;
     emissions_breakdown.total = emissions_breakdown.pv + emissions_breakdown.batt;
     
@@ -146,24 +153,24 @@ if ~strcmp(result_50.status, 'infeasible or error')
     % ===== PRINT SUMMARY TO CONSOLE =====
     fprintf('\n========== OPTIMIZATION RESULTS ==========\n');
     fprintf('Objective: %s\n', params.objective_type);
+    fprintf('\n--- SYSTEM SIZING ---\n');
+    fprintf('  South-facing PV:  %.2f kWp\n', result_50.x_pv);
+    fprintf('  North-facing PV:  %.2f kWp\n', result_50.x_pv2);
+    fprintf('  Total PV:         %.2f kWp\n', result_50.x_pv + result_50.x_pv2);
+    fprintf('  Battery:          %.2f kWh\n', result_50.E_bess);
     fprintf('\n--- COST BREAKDOWN (Annual, EUR) ---\n');
-    fprintf('  PV:        %.2f\n', cost_breakdown.pv);
-    fprintf('  Grid:      %.2f\n', cost_breakdown.grid);
-    fprintf('  Battery:   %.2f\n', cost_breakdown.batt);
-    fprintf('  TOTAL:     %.2f\n', cost_breakdown.total);
+    fprintf('  South-facing PV:  %.2f\n', cost_breakdown.pv_1);
+    fprintf('  North-facing PV:  %.2f\n', cost_breakdown.pv_2);
+    fprintf('  Battery:          %.2f\n', cost_breakdown.batt);
+    fprintf('  Grid:             %.2f\n', cost_breakdown.grid);
+    fprintf('  TOTAL:            %.2f\n', cost_breakdown.total);
     fprintf('  LCOE (Levelized Cost of Energy): %.4f EUR/kWh\n', lcoe_eur_per_kwh);
-    fprintf('\n--- GHG EMISSIONS BREAKDOWN (Life-cycle, Tons CO2-eq) ---\n');
-    fprintf('  PV:        %.2f\n', emissions_breakdown.pv / 1e3);
-    fprintf('  Battery:   %.2f\n', emissions_breakdown.batt / 1e3);
-    fprintf('  TOTAL:     %.2f\n', emissions_breakdown.total / 1e3);
-    fprintf('  Carbon Intensity: %.4f kg CO2-eq/kWh\n', carbon_intensity_kg_per_kwh);
-    fprintf('====================================================================\n\n');
     
     % ====== PIE CHARTS ======
     % Cost pie chart
-    fig_cost = figure('Name', 'Cost Breakdown (SOC0 = 50%)', 'NumberTitle', 'off', 'Position', [100 100 600 500], 'WindowStyle', 'docked');
-    cost_labels = {'PV', 'Battery', 'Grid'};
-    cost_values = [cost_breakdown.pv, cost_breakdown.batt, cost_breakdown.grid];
+    fig_cost = figure('Name', 'Cost Breakdown (SOC0 = 50%)', 'NumberTitle', 'off', 'Position', [100 100 800 500], 'WindowStyle', 'docked');
+    cost_labels = {'South PV', 'North PV', 'Battery', 'Grid'};
+    cost_values = [cost_breakdown.pv_1, cost_breakdown.pv_2, cost_breakdown.batt, cost_breakdown.grid];
 
     nonzero_mask = cost_values > 0;
     cost_labels = cost_labels(nonzero_mask);
@@ -194,7 +201,9 @@ supply_components = struct();
 demand_components = struct();
 
 % Current generation sources
-supply_components.solar = result_50.x_pv * data.P_solar_unit;  % kW
+supply_components.solar_1 = result_50.x_pv * data.P_solar_unit;      % South PV (kW)
+supply_components.solar_2 = result_50.x_pv2 * data.P_solar_unit_2;   % North PV (kW)
+supply_components.solar = supply_components.solar_1 + supply_components.solar_2;  % Total (kW)
 
 % Demand breakdown
 demand_components.load = data.P_load;  % kW
@@ -226,7 +235,8 @@ supply_components.excess = excess_generation;
 center_x = (1920 - 1000) / 2;  % 560
 center_y = (1080 - 800) / 2;  % 240
         
-titleSuffix = sprintf('MVP System Sizing Results: %.0f PV kWp', result_50.x_pv);
+titleSuffix = sprintf('MVP System Sizing: S-PV=%.0f kWp, N-PV=%.0f kWp, Batt=%.0f kWh', ...
+    result_50.x_pv, result_50.x_pv2, result_50.E_bess);
 
 % --- YEARLY SUPPLY-DEMAND BALANCE (Cumulative Stacked Bar Chart) ---
 % Aggregate hourly data by week
@@ -242,7 +252,7 @@ for w = 1:weeks_in_year
     start_idx = (w-1) * 168 + 1;
     end_idx = min(w * 168, T);
     weekly_demand(w) = sum(demand_components.load(start_idx:end_idx));
-    weekly_solar(w) = sum(supply_components.solar(start_idx:end_idx));
+    weekly_solar(w) = sum(supply_components.solar(start_idx:end_idx));  % Total solar
     weekly_batt_dis(w) = sum(supply_components.batt_dis(start_idx:end_idx));
     weekly_batt_ch(w) = sum(demand_components.batt_ch(start_idx:end_idx));
     weekly_slack(w) = sum(supply_components.slack(start_idx:end_idx));
@@ -296,10 +306,12 @@ fig5 = figure('Name', 'Weekly Dispatch Detail - SOC0 = 50%', 'NumberTitle', 'off
 hours_week_range = 1:numel(hours_week);
 
 % Use gated PV if available; fall back to ungated PV
-if isfield(result_50, 'x_pv_gate') && ~isempty(result_50.x_pv_gate)
-    solar_to_load = (result_50.x_pv_gate .* data.P_solar_unit); % kW
+if isfield(result_50, 'x_pv_gate_1') && ~isempty(result_50.x_pv_gate_1) && ...
+        isfield(result_50, 'x_pv_gate_2') && ~isempty(result_50.x_pv_gate_2)
+    solar_to_load = (result_50.x_pv_gate_1 .* data.P_solar_unit) + ...
+                    (result_50.x_pv_gate_2 .* data.P_solar_unit_2); % kW (total)
 else
-    solar_to_load = (result_50.x_pv .* data.P_solar_unit); % kW
+    solar_to_load = result_50.solar; % Fall back to total computed in supply_components
 end
 
 batt_dis = result_50.p_dis;  % kW
@@ -342,6 +354,33 @@ legend([h_supply(1), h_supply(2), h_supply(3), h_supply(4), h_ch], ...
     'Location', 'best');
 grid on;
 yline(0, 'k--', 'LineWidth', 0.5);
+
+% --- WEEKLY SOLAR BREAKDOWN (South vs North) ---
+fig_solar = figure('Name', 'Weekly Solar Generation Breakdown - SOC0 = 50%', 'NumberTitle', 'off', ...
+    'Position', [center_x center_y 1000 600], 'WindowStyle', 'docked');
+
+weekly_solar_1 = zeros(weeks_in_year, 1);
+weekly_solar_2 = zeros(weeks_in_year, 1);
+
+for w = 1:weeks_in_year
+    start_idx = (w-1) * 168 + 1;
+    end_idx = min(w * 168, T);
+    weekly_solar_1(w) = sum(supply_components.solar_1(start_idx:end_idx));
+    weekly_solar_2(w) = sum(supply_components.solar_2(start_idx:end_idx));
+end
+
+week_numbers = 1:weeks_in_year;
+solar_stack = [weekly_solar_1, weekly_solar_2];
+h_solar = bar(week_numbers, solar_stack, 'stacked', 'EdgeColor', 'none');
+h_solar(1).FaceColor = '#FDB462';  % South-facing (warmer)
+h_solar(2).FaceColor = '#B3DE69';  % North-facing (cooler)
+
+xlabel('Week of Year');
+ylabel('Energy (kWh)');
+title('Weekly Solar Generation: South-facing vs North-facing (SOC0 = 50%)');
+legend({'South-facing PV', 'North-facing PV'}, 'Location', 'best');
+grid on;
+xticks(1:2:weeks_in_year);
 
 % --- ANNUAL BATTERY STATE OF CHARGE ---
 fig6 = figure('Name', 'Annual Battery State of Charge - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 800 600], 'WindowStyle', 'docked');

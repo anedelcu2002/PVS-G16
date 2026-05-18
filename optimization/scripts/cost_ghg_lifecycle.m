@@ -12,9 +12,9 @@ function ghg = cost_ghg_lifecycle(vars, data, params)
     
     % ========== PV EMISSIONS ==========
     % Intensity: kg CO2-eq per inverter unit
-    if isfield(vars, 'x_pv')
+    if isfield(vars, 'x_pv') && isfield(vars, 'x_pv2')
         ghg_intensity_pv_per_unit = get_param_or_default(params, 'ghg_intensity_pv_per_unit', 1);
-        ghg = ghg + ghg_intensity_pv_per_unit * vars.x_pv;
+        ghg = ghg + ghg_intensity_pv_per_unit * (vars.x_pv + vars.x_pv2);
     end
     
     % ========== BATTERY EMISSIONS ==========
