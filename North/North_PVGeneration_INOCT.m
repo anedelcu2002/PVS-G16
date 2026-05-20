@@ -268,3 +268,75 @@ fprintf('LONGi: %.2f kWh\n', E_total(1));
 fprintf('AIKO : %.2f kWh\n', E_total(2));
 
 Control = P_DC_var .* modules(2).eta_STC .* G_POA
+
+%% ================= kWh/m^2 YIELD =================
+
+% ==================================================
+% WEEKLY ENERGY PER MODULE AREA
+% ==================================================
+
+Area_LONGi = modules(1).Area;
+Area_AIKO  = modules(2).Area;
+
+weekly_LONGi_kWhm2 = weekly_LONGi ./ Area_LONGi;
+weekly_AIKO_kWhm2  = weekly_AIKO  ./ Area_AIKO;
+
+%% ================= MOVING AVERAGE =================
+
+window = 4;
+
+LONGi_kWhm2_mov = movmean( ...
+    weekly_LONGi_kWhm2, ...
+    window, ...
+    'Endpoints','shrink');
+
+AIKO_kWhm2_mov = movmean( ...
+    weekly_AIKO_kWhm2, ...
+    window, ...
+    'Endpoints','shrink');
+
+%% ================= kWh/m^2 PLOT =================
+
+figure;
+
+% ===== BAR PLOT =====
+bar(1:n_weeks, ...
+    [weekly_LONGi_kWhm2 weekly_AIKO_kWhm2], ...
+    'grouped');
+
+hold on;
+
+% ===== MOVING AVERAGE =====
+plot(1:n_weeks, LONGi_kWhm2_mov, ...
+    'r', 'LineWidth', 2);
+
+plot(1:n_weeks, AIKO_kWhm2_mov, ...
+    'g', 'LineWidth', 2);
+
+xlabel('Week Number');
+
+ylabel('Energy Yield (kWh/m^2)');
+
+title('Weekly Area-Normalized PV Yield');
+
+legend('LONGi Weekly', ...
+       'AIKO Weekly', ...
+       'LONGi Moving Avg', ...
+       'AIKO Moving Avg', ...
+       'Location','best');
+
+grid on;
+
+%% ================= ANNUAL kWh/m^2 =================
+
+annual_kWhm2_LONGi = sum(G_8760(:,1)) / Area_LONGi;
+
+annual_kWhm2_AIKO  = sum(G_8760(:,2)) / Area_AIKO;
+
+fprintf('\n--- ANNUAL AREA-NORMALIZED YIELD ---\n');
+
+fprintf('LONGi: %.2f kWh/m^2\n', ...
+    annual_kWhm2_LONGi);
+
+fprintf('AIKO : %.2f kWh/m^2\n', ...
+    annual_kWhm2_AIKO);
