@@ -5,8 +5,8 @@ projectRoot = fileparts(mfilename('fullpath'));
 addpath(fullfile(projectRoot,"scripts"));
 
 %% Load electricity demand
-elec_tbl = readtable('Year 2026 Load Calculation.xlsx','Sheet','Sheet1');
-P_load = elec_tbl{:, 2}; % hourly load in kW
+elec_tbl = readtable('Year 2026 Load Calculation Fixed.xlsx','Sheet','Y1 Load Profile 3');
+P_load = elec_tbl{:, 11}; % hourly load in kW
 
 %% Load the initial solar profile
 solar_tbl = readtable('renewables_ninja_1_kw.csv');
@@ -14,7 +14,7 @@ Solar1 = solar_tbl.Var3; % hourly solar generation in kW
 Solar2 = solar_tbl.Var3.*0.9; 
 
 %% Load blackout profile
-blackout_tbl = readtable('Year 2026 Load Calculation.xlsx','Sheet','Y1 Load Profile 3');
+blackout_tbl = readtable('Year 2026 Load Calculation Fixed.xlsx','Sheet','Y1 Load Profile 3');
 P_blackout = blackout_tbl{:, 10}; % hourly blackout indicator (1 if blackout, 0 otherwise)
 
 %% Optimization
