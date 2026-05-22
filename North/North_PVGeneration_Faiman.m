@@ -342,6 +342,132 @@ fprintf('\n--- ANNUAL AREA-NORMALIZED YIELD ---\n');
 
 fprintf('LONGi: %.2f kWh/m^2\n', ...
     annual_kWhm2_LONGi);
+% RATED POWERS
+% ==================================================
 
+P_rated_LONGi = 0.590; % kWp
+P_rated_AIKO  = 0.480; % kWp
+
+% ==================================================
+% MODULE AREAS
+% ==================================================
+
+Area_LONGi = modules(1).Area;
+Area_AIKO  = modules(2).Area;
+
+%% ==================================================
+% HOURLY kWh/kWp
+%% ==================================================
+
+LONGi_kWhkWp_hourly = G_8760(:,1) ./ P_rated_LONGi;
+
+AIKO_kWhkWp_hourly = G_8760(:,2) ./ P_rated_AIKO;
+
+%% ==================================================
+% HOURLY kWh/m^2
+%% ==================================================
+
+LONGi_kWhm2_hourly = G_8760(:,1) ./ Area_LONGi;
+
+AIKO_kWhm2_hourly = G_8760(:,2) ./ Area_AIKO;
+
+%% ==================================================
+% HOURLY NORMALIZED PLOTS
+%% ==================================================
+
+figure;
+
+plot(LONGi_kWhkWp_hourly,'r'); hold on;
+plot(AIKO_kWhkWp_hourly,'g');
+
+xlabel('Hour of Year');
+ylabel('Specific Yield (kWh/kWp)');
+
+title('Hourly Specific Yield');
+
+legend('LONGi','AIKO');
+
+grid on;
+
+%% ==================================================
+
+figure;
+
+plot(LONGi_kWhm2_hourly,'r'); hold on;
+plot(AIKO_kWhm2_hourly,'g');
+
+xlabel('Hour of Year');
+ylabel('Area-Normalized Yield (kWh/m^2)');
+
+title('Hourly Area-Normalized Yield');
+
+legend('LONGi','AIKO');
+
+grid on;
+
+%% ==================================================
+% EXPORT COMPLETE HOURLY DATA
+%% ==================================================
+
+Hourly_Normalized_Output = table( ...
+    time, ...
+    G_8760(:,1), ...
+    G_8760(:,2), ...
+    LONGi_kWhkWp_hourly, ...
+    AIKO_kWhkWp_hourly, ...
+    LONGi_kWhm2_hourly, ...
+    AIKO_kWhm2_hourly, ...
+    'VariableNames', ...
+    {'Time', ...
+     'LONGi_kWh', ...
+     'AIKO_kWh', ...
+     'LONGi_kWh_per_kWp', ...
+     'AIKO_kWh_per_kWp', ...
+     'LONGi_kWh_per_m2', ...
+     'AIKO_kWh_per_m2'});
+
+%% ==================================================
+% WRITE TO EXCEL
+%% ==================================================
+
+writetable( ...
+    Hourly_Normalized_Output, ...
+    'Hourly_Normalized_PV_Output.xlsx');
+
+fprintf('\nHourly normalized data exported successfully.\n');
+
+%% ==================================================
+% SEPARATE HOURLY kWh/kWp PROFILE - LONGi
+%% ==================================================
+
+figure;
+
+plot(LONGi_kWhkWp_hourly, ...
+    'r', 'LineWidth', 0.5);
+
+xlabel('Hour of Year');
+
+ylabel('Specific Yield (kWh/kWp)');
+
+title('LONGi Hourly Specific Yield');
+
+grid on;
+
+%% ==================================================
+% SEPARATE HOURLY kWh/kWp PROFILE - AIKO
+%% ==================================================
+
+figure;
+
+plot(AIKO_kWhkWp_hourly, ...
+    'g', 'LineWidth', 0.5);
+
+xlabel('Hour of Year');
+
+ylabel('Specific Yield (kWh/kWp)');
+
+title('AIKO Hourly Specific Yield');
+
+grid on;
 fprintf('AIKO : %.2f kWh/m^2\n', ...
     annual_kWhm2_AIKO);
