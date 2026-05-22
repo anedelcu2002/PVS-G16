@@ -28,14 +28,15 @@ function result = build_problem(data, params, constraint_registry, objective_reg
 
     %% Initialize constraints with variable bounds
     x_pv_ub = get_param_or_default(params, 'x_pv_ub', 100);
+    x_pv2_ub = get_param_or_default(params, 'x_pv2_ub', 100);
     constraints = [0 <= vars.x_pv <= x_pv_ub];
-    constraints = [constraints, 0 <= vars.x_pv2 <= x_pv_ub];
+    constraints = [constraints, 0 <= vars.x_pv2 <= x_pv2_ub];
     constraints = [constraints, 0 <= vars.slack];
     constraints = [constraints, 0 <= vars.u_slack <= 1];
     constraints = [constraints, 0 <= vars.y_solar_load_total <= 1];
     constraints = [constraints, 0 <= vars.x_pv_gate_total <= x_pv_ub];
     constraints = [constraints, 0 <= vars.x_pv_gate_1 <= x_pv_ub];
-    constraints = [constraints, 0 <= vars.x_pv_gate_2 <= x_pv_ub];
+    constraints = [constraints, 0 <= vars.x_pv_gate_2 <= x_pv2_ub];
 
     slack_big_m = get_param_or_default(params, 'slack_big_m', max(data.P_load) + 1);
     constraints = [constraints, vars.slack <= slack_big_m * vars.u_slack];

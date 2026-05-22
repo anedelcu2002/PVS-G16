@@ -13,6 +13,19 @@ solar_tbl = readtable('renewables_ninja_1_kw.csv');
 Solar1 = solar_tbl.Var3; % hourly solar generation in kW
 Solar2 = solar_tbl.Var3.*0.9; 
 
+module=1; % 1 for longi, 2 for aiko
+
+%% Load the solar generation profiles
+south_tbl = readtable('generation_profile_south.xlsx', 'Sheet', 'Sheet1');
+north_tbl = readtable('generation_profile_north.xlsx', 'Sheet', 'Sheet1');
+if module == 1
+    Solar1 = south_tbl{:,2};
+    Solar2 = north_tbl{:,2};
+else
+    Solar1 = south_tbl{:,3};
+    Solar2 = north_tbl{:,3};
+end
+
 %% Load blackout profile
 blackout_tbl = readtable('Year 2026 Load Calculation Fixed.xlsx','Sheet','Y1 Load Profile 3');
 P_blackout = blackout_tbl{:, 10}; % hourly blackout indicator (1 if blackout, 0 otherwise)
@@ -34,16 +47,21 @@ params.objective_type = 'economic';  % Choose: 'economic' (cost minimization) or
 
 % Technical
 params.dt_h = 1.0;
-params.x_pv_ub = 20; % max kWp
-params.x_pv2_ub = 20; % max kWp
+if module == 1
+    params.x_pv_ub = 12; % max 12 LONGi panels on each side of the roof
+    params.x_pv2_ub = 12;
+else
+    params.x_pv_ub = 16; % max 16 AIKO panels on each side of the roof
+    params.x_pv2_ub = 16;
+end
 params.battery_c_rating = 0.25;             % C-rating: 0.25 h^-1 means 4hr discharge
 params.eta_ch = sqrt(0.93);                 % Charging efficiency (round-trip loss: 0.93)
 params.eta_dis = sqrt(0.93);                % Discharging efficiency (same as charge)
-params.soc_min = 0.0;                       % Min state-of-charge (10%)
-params.soc_max = 1.0;                       % Max state-of-charge (90%)
+params.soc_min = 0.15;                       % Min state-of-charge (15%)
+params.soc_max = 0.95;                       % Max state-of-charge (95%)
 params.soc0 = 0.95;                         % Initial SOC
 params.soc_tolerance = 10;                  % Cyclic tolerance (kWh)
-params.E_bess_ub = 100;                     % Battery energy upper bound (kWh)
+params.E_bess_ub = 150;                     % Battery energy upper bound (kWh)
 params.E_bess_lb = 0;
 params.soc_solar_allow = 0.95;
 params.soc_big_m = params.E_bess_ub;        % safe scale
@@ -52,12 +70,18 @@ params.soc_big_m = params.E_bess_ub;        % safe scale
 % Economics
 params.discount_rate = 0;
 params.project_life = 3;
-params.c_pv_unit_capex = 900;           % /kWp
-params.c_pv_unit_fom_per_year = 5;      % /kWp/year
-params.c_bess_E_capex_per_kWh = 250;         % Battery capex (EUR/kWh)
-params.c_bess_E_fom_per_kWh_yr = params.c_bess_E_capex_per_kWh*0.04;          % Battery FOM (EUR/kWh/year)
 
-params.slack_hourly_penalty_eur = 112.5;
+if module == 1
+    params.c_pv_unit_capex = 950; % cost per LONGi panel
+else
+    params.c_pv_unit_capex = 800; % cost per AIKO panel
+end
+
+params.c_pv_unit_fom_per_year = 0;      % /year
+params.c_bess_E_capex_per_kWh = 250;         % Battery capex (EUR/kWh)
+params.c_bess_E_fom_per_kWh_yr = 0;          % Battery FOM (EUR/kWh/year)
+
+params.slack_hourly_penalty_eur = 112.5; % compensation to clients
 params.slack_big_m = max(P_load) + 1; % safe big-M (kW)
 
 
@@ -68,17 +92,22 @@ params.grid_big_m = 1e6;  % or set to max expected import
 
 % ============== LIFECYCLE GHG PARAMETERS (EMBEDDED EMISSIONS) ===============
 % All GHG intensities in kg CO2-eq per unit
-params.ghg_intensity_pv_per_unit = 5;         % kg CO2-eq per kWp
+params.ghg_intensity_pv_per_unit = 5;         % kg CO2-eq per panel
 params.ghg_intensity_batt_per_kWh = 0.09;         % kg CO2-eq per kWh of battery storage
 
 
 fprintf('Data check before optimization:\n');
-fprintf('  P_load: min=%.2e, max=%.2e\n', min(data.P_load), max(data.P_load));
-fprintf('  P_solar_unit: min=%.2e, max=%.2e\n', min(data.P_solar_unit), max(data.P_solar_unit));
-fprintf('  P_solar_unit_2: min=%.2e, max=%.2e\n', min(data.P_solar_unit_2), max(data.P_solar_unit_2));
-fprintf('  Max possible gen: %.2e kW\n', ...
+if module == 1
+    fprintf('LONGi module');
+else
+    fprintf('AIKO module');
+end
+fprintf('  P_load: min=%.0f, max=%.0f\n', min(data.P_load), max(data.P_load));
+fprintf('  P_solar_unit: min=%.0f, max=%.0f\n', min(data.P_solar_unit), max(data.P_solar_unit));
+fprintf('  P_solar_unit_2: min=%.0f, max=%.0f\n', min(data.P_solar_unit_2), max(data.P_solar_unit_2));
+fprintf('  Max possible gen: %.0f kW\n', ...
     params.x_pv_ub*max(data.P_solar_unit) + params.x_pv2_ub*max(data.P_solar_unit_2));
-fprintf('  Peak load: %.2e kW\n', max(data.P_load));
+fprintf('  Peak load: %.0f kW\n', max(data.P_load));
 
 fprintf('Building MVP optimization problem...\n')
 fprintf('\n')
@@ -158,18 +187,18 @@ if ~strcmp(result_50.status, 'infeasible or error')
     fprintf('\n========== OPTIMIZATION RESULTS ==========\n');
     fprintf('Objective: %s\n', params.objective_type);
     fprintf('\n--- SYSTEM SIZING ---\n');
-    fprintf('  South-facing PV:  %.2f kWp\n', result_50.x_pv);
-    fprintf('  North-facing PV:  %.2f kWp\n', result_50.x_pv2);
-    fprintf('  Total PV:         %.2f kWp\n', result_50.x_pv + result_50.x_pv2);
-    fprintf('  Battery:          %.2f kWh\n', result_50.E_bess);
+    fprintf('  South-facing PV:  %.0f panels\n', result_50.x_pv);
+    fprintf('  North-facing PV:  %.0f panels\n', result_50.x_pv2);
+    fprintf('  Total PV:         %.0f panels\n', result_50.x_pv + result_50.x_pv2);
+    fprintf('  Battery:          %.0f kWh\n', result_50.E_bess);
     fprintf('\n--- COST BREAKDOWN (Annual, EUR) ---\n');
-    fprintf('  South-facing PV:  %.2f\n', cost_breakdown.pv_1);
-    fprintf('  North-facing PV:  %.2f\n', cost_breakdown.pv_2);
-    fprintf('  Battery:          %.2f\n', cost_breakdown.batt);
-    fprintf('  Grid:             %.2f\n', cost_breakdown.grid);
-    fprintf('  Slack hours penalty: %.2f\n', cost_breakdown.slack);
-    fprintf('  TOTAL:            %.2f\n', cost_breakdown.total);
-    fprintf('  LCOE (Levelized Cost of Energy): %.4f EUR/kWh\n', lcoe_eur_per_kwh);
+    fprintf('  South-facing PV:  %.0f\n', cost_breakdown.pv_1);
+    fprintf('  North-facing PV:  %.0f\n', cost_breakdown.pv_2);
+    fprintf('  Battery:          %.0f\n', cost_breakdown.batt);
+    fprintf('  Grid:             %.0f\n', cost_breakdown.grid);
+    fprintf('  Slack hours penalty: %.0f\n', cost_breakdown.slack);
+    fprintf('  TOTAL:            %.0f\n', cost_breakdown.total);
+    fprintf('  LCOE (Levelized Cost of Energy): %.0f EUR/kWh\n', lcoe_eur_per_kwh);
     
     % ====== PIE CHARTS ======
     % Cost pie chart
@@ -183,10 +212,10 @@ if ~strcmp(result_50.status, 'infeasible or error')
 
     pie(cost_values);
     legend(cost_labels, 'Location', 'bestoutside');
-    title(sprintf('Annual Cost Breakdown (SOC0 = 50%%)\nTotal: %.2f EUR', cost_breakdown.total));
+    title(sprintf('Annual Cost Breakdown \nTotal: %.0f EUR', cost_breakdown.total));
     
     % Emissions pie chart (split backup into capacity and dispatch)
-    fig_emis = figure('Name', 'GHG Emissions Breakdown (SOC0 = 50%)', 'NumberTitle', 'off', 'Position', [700 100 600 500], 'WindowStyle', 'docked');
+    fig_emis = figure('Name', 'GHG Emissions Breakdown', 'NumberTitle', 'off', 'Position', [700 100 600 500], 'WindowStyle', 'docked');
     emis_labels = {'PV', 'Battery'};
     emis_values = [emissions_breakdown.pv, emissions_breakdown.batt];
     % Filter out zero values for cleaner visualization
@@ -195,7 +224,7 @@ if ~strcmp(result_50.status, 'infeasible or error')
     emis_values = emis_values(nonzero_emis_mask);
     pie(emis_values);
     legend(emis_labels, 'Location', 'bestoutside');
-    title(sprintf('Lifecycle GHG Breakdown (SOC0 = 50%%)\nTotal: %.2f Tons CO2-eq', emissions_breakdown.total / 1e3));
+    title(sprintf('Lifecycle GHG Breakdown \nTotal: %.0f Tons CO2-eq', emissions_breakdown.total / 1e3));
 end
 
 % ====== COMPLIANCE CHECK VISUALIZATIONS (SOC0 = 50%) ======
@@ -240,7 +269,7 @@ supply_components.excess = excess_generation;
 center_x = (1920 - 1000) / 2;  % 560
 center_y = (1080 - 800) / 2;  % 240
         
-titleSuffix = sprintf('MVP System Sizing: S-PV=%.0f kWp, N-PV=%.0f kWp, Batt=%.0f kWh', ...
+titleSuffix = sprintf('MVP System Sizing: S-PV=%.0f panels, N-PV=%.0f panels, Batt=%.0f kWh', ...
     result_50.x_pv, result_50.x_pv2, result_50.E_bess);
 
 % --- YEARLY SUPPLY-DEMAND BALANCE (Cumulative Stacked Bar Chart) ---
@@ -266,7 +295,7 @@ for w = 1:weeks_in_year
     weekly_grid(w) = sum(supply_components.grid(start_idx:end_idx));
 end
 
-fig1 = figure('Name', 'Weekly Supply-Demand Balance (Cumulative) - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 1000 600], 'WindowStyle', 'docked');
+fig1 = figure('Name', 'Weekly Supply-Demand Balance (Cumulative)', 'NumberTitle', 'off', 'Position', [center_x center_y 1000 600], 'WindowStyle', 'docked');
 hold on;
 
 % Create stacked bar chart showing power balance (kWh)
@@ -299,7 +328,7 @@ yline(0, 'k-', 'LineWidth', 0.5, 'HandleVisibility', 'off');
 hold off;
 xlabel('Week of Year'); 
 ylabel('Energy (kWh)');
-title(sprintf('Weekly Power Balance - Cumulative (SOC0 = 50%%)\n%s', titleSuffix));
+title(sprintf('Weekly Power Balance - Cumulative\n%s', titleSuffix));
 legend([h_Supply(1), h_Supply(2), h_Supply(3), h_Supply(4), h_Demand(1), h_Demand(2), h_line], ...
     {'Solar (South)', 'Solar (North)', 'Battery Discharge', 'Grid', 'Battery Charge', 'Unmet (Slack)', 'Weekly Load'}, ...
     'Location', 'best');
@@ -307,7 +336,7 @@ grid on;
 xticks(1:2:weeks_in_year);
 
 % --- WEEKLY DISPATCH DETAIL (Renewables, Battery, Curtailment, Slack) ---
-fig5 = figure('Name', 'Weekly Dispatch Detail - SOC0 = 50%', 'NumberTitle', 'off', ...
+fig5 = figure('Name', 'Weekly Dispatch Detail', 'NumberTitle', 'off', ...
               'Position', [center_x center_y 1000 600], 'WindowStyle', 'docked');
 
 hours_week_range = 1:numel(hours_week);
@@ -368,7 +397,7 @@ plot(hours_week_range, supply_components.excess(hours_week_range), 'mo-', ...
 hold off;
 xlabel('Hour of Week 1');
 ylabel('Power (kW)');
-title(sprintf('First Week Dispatch Detail (SOC0 = 50%%)\n%s', titleSuffix));
+title(sprintf('First Week Dispatch Detail\n%s', titleSuffix));
 legend([h_supply(1), h_supply(2), h_supply(3), h_supply(4), h_supply(5), h_ch, h_line], ...
     {'Solar (South)', 'Solar (North)', 'Battery Discharge', 'Grid', 'Unmet (Slack)', 'Battery Charge', 'Load'}, ...
     'Location', 'best');
@@ -437,7 +466,7 @@ plot(hours_all_range, supply_components.excess(hours_all_range), 'mo-', ...
 hold off;
 xlabel('Hour of Year');
 ylabel('Power (kW)');
-title(sprintf('Annual Dispatch Detail (SOC0 = 50%%)\n%s', titleSuffix));
+title(sprintf('Annual Dispatch Detail\n%s', titleSuffix));
 legend([h_supply_all(1), h_supply_all(2), h_supply_all(3), h_supply_all(4), h_supply_all(5), h_ch_all, h_line_all], ...
     {'Solar (South)', 'Solar (North)', 'Battery Discharge', 'Grid', 'Unmet (Slack)', 'Battery Charge', 'Load'}, ...
     'Location', 'best');
@@ -446,7 +475,7 @@ yline(0, 'k--', 'LineWidth', 0.5);
 
 
 % --- ANNUAL BATTERY STATE OF CHARGE ---
-fig6 = figure('Name', 'Annual Battery State of Charge - SOC0 = 50%', 'NumberTitle', 'off', 'Position', [center_x center_y 800 600], 'WindowStyle', 'docked');
+fig6 = figure('Name', 'Annual Battery State of Charge', 'NumberTitle', 'off', 'Position', [center_x center_y 800 600], 'WindowStyle', 'docked');
 soc_annual = result_50.e_stored / result_50.E_bess;  % Normalize to 0-1 range
 plot(0:T, soc_annual, 'LineWidth', 1.5, 'Color', '#0066FF');
 hold on;
@@ -455,7 +484,7 @@ yline(params.soc_max, 'g--', 'LineWidth', 1.5, 'DisplayName', sprintf('Max SOC (
 hold off;
 xlabel('Hour of Year'); 
 ylabel('State of Charge (SOC)');
-title(sprintf('Annual Battery State of Charge (SOC0 = 50%%)\n%s', titleSuffix));
+title(sprintf('Annual Battery State of Charge\n%s', titleSuffix));
 legend('Location', 'best');
 grid on;
 ylim([0 1]);

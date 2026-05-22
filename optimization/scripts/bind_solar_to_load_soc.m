@@ -2,6 +2,8 @@ function constraints = bind_solar_to_load_soc(vars, data, params)
     T = numel(data.P_load);
     soc_allow = get_param_or_default(params, 'soc_solar_allow', 0.95);
     x_pv_ub = get_param_or_default(params, 'x_pv_ub', 100);
+    x_pv2_ub = get_param_or_default(params, 'x_pv2_ub', x_pv_ub);
+    x_pv_ub_total = x_pv_ub + x_pv2_ub;
     M = get_param_or_default(params, 'soc_big_m', 1e2); % kWh, use E_bess_ub as a safe default
 
     constraint_list = [];
@@ -11,9 +13,9 @@ function constraints = bind_solar_to_load_soc(vars, data, params)
 
         % McCormick envelope for x_pv_gate_total(t) = y_solar_load_total(t) * (x_pv + x_pv2)
         x_pv_total = vars.x_pv + vars.x_pv2;
-        c1 = vars.x_pv_gate_total(t) <= x_pv_ub * vars.y_solar_load_total(t);
+        c1 = vars.x_pv_gate_total(t) <= x_pv_ub_total * vars.y_solar_load_total(t);
         c2 = vars.x_pv_gate_total(t) <= x_pv_total;
-        c3 = vars.x_pv_gate_total(t) >= x_pv_total - x_pv_ub * (1 - vars.y_solar_load_total(t));
+        c3 = vars.x_pv_gate_total(t) >= x_pv_total - x_pv_ub_total * (1 - vars.y_solar_load_total(t));
         c4 = vars.x_pv_gate_total(t) >= 0;
 
         % Split total gated capacity between arrays
