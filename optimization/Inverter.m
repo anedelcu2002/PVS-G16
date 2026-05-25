@@ -1,8 +1,11 @@
-Soort = 'XW6848';
-PV = 'Longi';
-P_dc = readtable("Final_8760_Generation.xlsx");
+'clc';
+clear 'all'
 
-	
+Soort = 'SW4048';
+
+Gen = readtable("Final_8760_Generation.xlsx");
+Gen = Gen(1:8760,2:3);
+P_dc = table2array(Gen);
 switch Soort
     case 'XW6848'
         A = 6.75776E+03;
@@ -29,19 +32,18 @@ switch Soort
         disp('No inverter type was chosen')
 end
 
-
-P_dc = readtable("Final_8760_Generation.xlsx");
-P_dc(2:8760,2:3);
-P_in = table2array(ans) 
+P_comp = 3600*1000*P_dc;
 
 
-
- P_ac = ((P_ac0/(A-B))-C*(A-B))*(P_in* 1000 *3600-B)+C*power((P_in* 1000 *3600-B),2);
-
- eff = 100*P_ac./P_in;
+%It seems to go wrong here, but what the hell could be the problem?
+P_ac = max(((P_ac0/(A-B))-C*(A-B))*(P_comp-B)+C*power((P_comp-B),2),0)./(1000*3600);
+t=linspace(0,8760,8760);
+avg= movmean(P_ac,24);
+plot(t,P_ac(:,1),t,avg)
 
 
 
+%writematrix(P_ac,'SW4048.csv')
 
 
 
