@@ -1,10 +1,10 @@
 'clc';
 clear 'all'
 
-Soort = 'SW4048';
+Soort = 'SW4024';
 
 Gen = readtable("Final_8760_Generation.xlsx");
-Gen = Gen(1:8760,2:3);
+Gen = Gen(1:168,2:3);
 P_dc = table2array(Gen);
 switch Soort
     case 'XW6848'
@@ -13,35 +13,40 @@ switch Soort
         C = -1.2E-05;		
         Vdc = 48;
         P_ac0 = 6.12E+03;
-        fprintf('Inverter type is XW6848 \n')
+        %fprintf('Inverter type is XW6848 \n')
     case 'SW4024'
         A = 3.655E+03;
     	B = 4.2E+01;
         C = -1.2E-05;
         Vdc = 24;
         P_ac0 = 3.4E+03;
-        fprintf('Inverter type is SW4024 \n')
+        %fprintf('Inverter type is SW4024 \n')
     case 'SW4048'
         A = 4.086+03;
         B = 4.2E+01;
         C = -1.2E-05;
         Vdc = 48;
         P_ac0 = 3.8E+03;
-        fprintf('Inverter type is SW4048 \n')
+        %fprintf('Inverter type is SW4048 \n')
     otherwise    
         disp('No inverter type was chosen')
 end
 
-P_comp = 3600*1000*P_dc;
+P_comp = 3600.*1000.*P_dc;
 
 
 %It seems to go wrong here, but what the hell could be the problem?
 P_ac = max(((P_ac0/(A-B))-C*(A-B))*(P_comp-B)+C*power((P_comp-B),2),0)./(1000*3600);
-t=linspace(0,8760,8760);
-avg= movmean(P_ac,24);
-plot(t,P_ac(:,1),t,avg)
+t=linspace(0,length(P_dc),length(P_dc));
+eff = P_ac./(P_dc+10E-16);
+avg= movmean(eff,12);
+subplot(1,2,1)
+plot(t,eff(:,1),t,avg(:,1))
+legend('Longi-power','Longi-eff')
 
-
+subplot(1,2,2)
+plot(t,eff(:,2),t,avg(:,2))
+legend('Aiko-power','Aiko-eff')
 
 %writematrix(P_ac,'SW4048.csv')
 
