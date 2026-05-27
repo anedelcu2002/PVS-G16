@@ -17,7 +17,7 @@ P_load = elec_tbl{:, 11}; % hourly load in kW
 module=1; % 1 for longi, 2 for aiko
 south_tbl = readtable('generation_profile_south.xlsx', 'Sheet', 'Sheet1');
 north_tbl = readtable('generation_profile_north.xlsx', 'Sheet', 'Sheet1');
-if module == 1
+if module == 2
     Solar1 = south_tbl{:,2};
     Solar2 = north_tbl{:,2};
 else
@@ -136,7 +136,7 @@ constraint_registry = {@bind_power_balance, ...
 objective_registry = {@default_objective, @cost_slack, @cost_battery, @cost_grid};
 
 
-use_saved_result = true; % set false to run optimization
+use_saved_result = false; % set false to run optimization
 
 results_path = fullfile(projectRoot, 'results', 'result_50.mat');
 
@@ -516,4 +516,5 @@ title(sprintf('Horizon Battery State of Charge\n%s', titleSuffix));
 legend('Location', 'best');
 grid on;
 ylim([0 1]);
+xlim([0 T+100]);
 
