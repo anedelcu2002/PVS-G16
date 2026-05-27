@@ -9,13 +9,20 @@ function constraints = bind_battery_soc(vars, data, params)
     
     constraint_list = [];
     
+    % Use degraded capacity factor if provided
+    if isfield(data, 'batt_cap_factor')
+        cap_factor = data.batt_cap_factor;
+    else
+        cap_factor = ones(T+1, 1);
+    end
+
     % Initial SOC constraint: e_stored(1) = soc0 * E_bess
     constraint_list = [constraint_list, vars.e_stored(1) == soc0 * vars.E_bess];
-    
-    % SOC bounds for all time steps
+
+    % SOC bounds for all time steps (scaled by degraded capacity)
     for t = 1:T+1
-        lb = soc_min * vars.E_bess <= vars.e_stored(t);
-        ub = vars.e_stored(t) <= soc_max * vars.E_bess;
+        lb = soc_min * cap_factor(t) * vars.E_bess <= vars.e_stored(t);
+        ub = vars.e_stored(t) <= soc_max * cap_factor(t) * vars.E_bess;
         constraint_list = [constraint_list, lb, ub];
     end
     
