@@ -5,11 +5,16 @@ projectRoot = fileparts(mfilename('fullpath'));
 addpath(fullfile(projectRoot,"scripts"));
 
 %% Load electricity demand
-elec_tbl = readtable('Year 2026 Load Calculation Fixed.xlsx','Sheet','Y1 Load Profile 3');
+opts = spreadsheetImportOptions("NumVariables", 11);
+opts.Sheet = "Y1 Load Profile 3";
+opts.DataRange = "A2:K26281";
+opts.VariableNames = ["Year", "Month", "Day", "Hour", "MonthlyLoad", "TotalDaysInThatMonth", "DailyEnergy", "HourlyConsumptionFactor", "FinalLoadProfileKW", "BlackoutProfile", "EffectiveLoad"];
+opts.VariableTypes = ["double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double"];
+elec_tbl = readtable("C:\Users\alexn\Documents\GitHub\PVS-Group16\optimization\Year 2026 Load Calculation Fixed.xlsx", opts, "UseExcel", false);
 P_load = elec_tbl{:, 11}; % hourly load in kW
 
 %% Load the solar generation profiles
-module=2; % 1 for longi, 2 for aiko
+module=1; % 1 for longi, 2 for aiko
 south_tbl = readtable('generation_profile_south.xlsx', 'Sheet', 'Sheet1');
 north_tbl = readtable('generation_profile_north.xlsx', 'Sheet', 'Sheet1');
 if module == 1
@@ -21,15 +26,12 @@ else
 end
 
 %% Load blackout profile
-blackout_tbl = readtable('Year 2026 Load Calculation Fixed.xlsx','Sheet','Y1 Load Profile 3');
-P_blackout = blackout_tbl{:, 10}; % hourly blackout indicator (1 if blackout, 0 otherwise)
+P_blackout = elec_tbl{:, 10}; % uses the 3-year range
 
 %% Expand to 3-year horizon by repeating the 1-year profiles
 years = 3;
-P_load = repmat(P_load, years, 1);
 Solar1 = repmat(Solar1, years, 1);
 Solar2 = repmat(Solar2, years, 1);
-P_blackout = repmat(P_blackout, years, 1);
 
 %% Detect start of blackout blocks (one event per contiguous blackout)
 blackout_event_start = zeros(size(P_blackout));
