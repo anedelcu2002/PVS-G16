@@ -1,4 +1,4 @@
-clc; clear; close all; warning("off");
+c12lc; clear; close all; warning("off");
 
 %% Resolve project root and add paths
 projectRoot = fileparts(mfilename('fullpath'));
