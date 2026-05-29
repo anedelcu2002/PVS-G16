@@ -52,7 +52,7 @@ subplot(1,2,2)
 plot(t,avg(:,1),t,avg(:,2))
 legend('Longi-eff','Aiko-eff')
 
-writematrix(eff,'effSW4048.csv')
+%writematrix(eff,'effSW4048.csv')
 
 Dccheck = P_dc >0;
 Pnonzero = sum(Dccheck)/length(P_dc)
