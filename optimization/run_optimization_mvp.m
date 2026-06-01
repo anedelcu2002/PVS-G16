@@ -1,4 +1,4 @@
-c12lc; clear; close all; warning("off");
+clc; clear; close all; warning("off");
 
 %% Resolve project root and add paths
 projectRoot = fileparts(mfilename('fullpath'));
@@ -14,10 +14,10 @@ elec_tbl = readtable("C:\Users\alexn\Documents\GitHub\PVS-Group16\optimization\Y
 P_load = elec_tbl{:, 11}; % hourly load in kW
 
 %% Load the solar generation profiles
-module=1; % 1 for longi, 2 for aiko
+module=2; % 1 for longi, 2 for aiko
 south_tbl = readtable('generation_profile_south.xlsx', 'Sheet', 'Sheet1');
 north_tbl = readtable('generation_profile_north.xlsx', 'Sheet', 'Sheet1');
-if module == 2
+if module == 1
     Solar1 = south_tbl{:,2};
     Solar2 = north_tbl{:,2};
 else
@@ -136,9 +136,9 @@ constraint_registry = {@bind_power_balance, ...
 objective_registry = {@default_objective, @cost_slack, @cost_battery, @cost_grid};
 
 
-use_saved_result = false; % set false to run optimization
+use_saved_result = true; % set false to run optimization
 
-results_path = fullfile(projectRoot, 'results', 'result_50.mat');
+results_path = fullfile(projectRoot, 'results', 'longi_results.mat');
 
 if use_saved_result && isfile(results_path)
     loaded = load(results_path);
