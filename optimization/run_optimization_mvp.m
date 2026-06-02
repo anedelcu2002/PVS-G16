@@ -10,7 +10,7 @@ opts.Sheet = "Y1 Load Profile 3";
 opts.DataRange = "A2:K26281";
 opts.VariableNames = ["Year", "Month", "Day", "Hour", "MonthlyLoad", "TotalDaysInThatMonth", "DailyEnergy", "HourlyConsumptionFactor", "FinalLoadProfileKW", "BlackoutProfile", "EffectiveLoad"];
 opts.VariableTypes = ["double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double"];
-elec_tbl = readtable("C:\Users\alexn\Documents\GitHub\PVS-Group16\optimization\Year 2026 Load Calculation Fixed.xlsx", opts, "UseExcel", false);
+elec_tbl = readtable("Year 2026 Load Calculation Fixed.xlsx", opts, "UseExcel", false);
 P_load = elec_tbl{:, 11}; % hourly load in kW
 
 %% Load the solar generation profiles
