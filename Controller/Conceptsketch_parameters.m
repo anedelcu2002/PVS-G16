@@ -5,12 +5,7 @@ projectRoot = fileparts(mfilename('fullpath'));
 addpath(fullfile(projectRoot,"scripts"));
 
 %% Load electricity demand
-opts = spreadsheetImportOptions("NumVariables", 11);
-opts.Sheet = "Sheet1";
-opts.DataRange = "A2:K26281";
-opts.VariableNames = ["Year", "Month", "Day", "Hour", "MonthlyLoad", "TotalDaysInThatMonth", "DailyEnergy", "HourlyConsumptionFactor", "FinalLoadProfileKW", "BlackoutProfile", "EffectiveLoad"];
-opts.VariableTypes = ["double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double"];
-elec_tbl = readtable("Year 2026 Load Calculation Fixed.xlsx", opts, "UseExcel", false);
+elec_tbl = readtable('load_values_3_years.csv');
 P_load = elec_tbl{:, 11}; % 3-year hourly load in kW
 
 %% Load the solar generation profiles
@@ -18,10 +13,10 @@ module=1; % 1 for longi, 2 for aiko
 south_tbl = readtable('generation_profile_south.xlsx', 'Sheet', 'Sheet1');
 if module == 1
     P_solar = south_tbl{:,2};
-    nr_panels = 6;
+    nr_panels = 6; % 6 panels in series
 else
     P_solar = south_tbl{:,3};
-    nr_panels = 8;
+    nr_panels = 8; % 8 panels in series
 end
 
 years = 3;
@@ -45,5 +40,14 @@ cycles_at_e(2:end) = cumsum(blackout_event_start);
 batt_cap_factor = 1 - batt_deg_per_cycle * cycles_at_e;
 batt_cap_factor = max(batt_cap_factor, 0); % safety clamp
 
-figure
-plot(P_load)
+%% Create simulink variables
+Q = 84480; % 20 batteries x 4224 Wh, can also be 8p x 2s x 200 Wh at 25.6 V
+Vnom = 51.2; % system voltage is 51.2V, per-battery voltage is 12.8 V
+AH = Q/Vnom;
+effConvBESS = sqrt(0.92); % 92% round-trip efficiency
+Nb_s = 4;
+Nb_p = 5;
+SOC0 = 95;
+f = 50;
+V = 400; % shouldn't this be 230?   
+Ts = 60;
