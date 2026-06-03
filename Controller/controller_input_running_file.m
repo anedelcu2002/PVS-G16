@@ -10,7 +10,9 @@ if ~exist('outputs','dir'); mkdir('outputs'); end
 
 debug_mode = false;
 
+
 %% 1. Create the demand profiles
+
 demand_inputsDir = fullfile(projectRoot,"inputs","step01_demand_calculations");   
 if ~exist('outputs/step01_demand_calculations','dir'); mkdir('outputs/step01_demand_calculations'); end
 demandoutDir = fullfile(projectRoot,"outputs","step01_demand_calculations");
