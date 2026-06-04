@@ -3,12 +3,15 @@
 
 Sol= readtable("generation_profile_south.xlsx");
 input = readtable("Year 2026 Load Calculation Fixed.csv");
-H = hours(0:1:23);
+%H = hours(0:1:23);
 
 t = table2array(input(:,"Time"));
 T_f = table2array(input(:,"BlackoutProfile"));
 P = table2array(input(:,"EffectiveLoad"));
 Load = timetable(t,P);
+
+
+
 
 %opts = spreadsheetImportOptions("NumVariables", 11);
 %opts.Sheet = "Y1 Load Profile 3";
@@ -25,7 +28,7 @@ eta_dcdc = 0.98;
 effConvBESS = sqrt(0.92);
 
 
-Ts = 600;
+Ts = 3600;
 Q = 5120;
 Vnom = 25.6;
 AH= Q/Vnom;
