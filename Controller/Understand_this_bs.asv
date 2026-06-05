@@ -1,0 +1,49 @@
+% This file is purely for me to test for system behaviour with some dummy
+% code.
+
+Sol= readtable("generation_profile_south.xlsx");
+input = readtable("Year 2026 Load Calculation Fixed.csv");
+%H = hours(0:1:23);
+
+t = transpose(hours(0:1:3*8760-1));
+T_f = table2array(input(:,"BlackoutProfile"));
+P_cell = table2array(input(:,"EffectiveLoad"));
+P = str2double(P_cell);
+
+geval =  P > 10
+P(geval) = P(geval)/1E6
+
+P_stack= repelem(table2array(Sol(:,2)),3);
+disp(P)
+Load = timeseries(P);
+P_solar = timeseries(P_stack)';
+
+%mask = contains(P_cell.ColumnName, ',');
+
+%P_cell.ColumnName(mask)  = str2double(strrep(P_cell.ColumnName(mask),  ',', '.'));
+%P_cell.ColumnName(~mask) = str2double(P_cell.ColumnName(~mask));
+
+
+
+%opts = spreadsheetImportOptions("NumVariables", 11);
+%opts.Sheet = "Y1 Load Profile 3";
+%opts.DataRange = "A2:K26281";
+%opts.VariableNames = ["Year", "Month", "Day", "Hour", "MonthlyLoad", "TotalDaysInThatMonth", "DailyEnergy", "HourlyConsumptionFactor", "FinalLoadProfileKW", "BlackoutProfile", "EffectiveLoad"];
+%opts.VariableTypes = ["double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double"];
+%elec_tbl = readtable("Year 2026 Load Calculation Fixed.xlsx", opts, "UseExcel", false);
+%Load = elec_tbl{:, 11}; % hourly load in kW
+
+
+
+eta_cc = 0.95;
+eta_dcdc = 0.98;
+effConvBESS = sqrt(0.92);
+
+
+Ts = 3600;
+Q = 5120;
+Vnom = 25.6;
+AH= Q/Vnom;
+SOC0 = 0.5;
+Nb_s = 1;
+Nb_p = ceil(37E4/Q);

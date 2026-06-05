@@ -5,11 +5,23 @@ Sol= readtable("generation_profile_south.xlsx");
 input = readtable("Year 2026 Load Calculation Fixed.csv");
 %H = hours(0:1:23);
 
-t = table2array(input(:,"Time"));
-T_f = table2array(input(:,"BlackoutProfile"));
-P = table2array(input(:,"EffectiveLoad"));
-Load = timetable(t,P);
+t = transpose(hours(0:1:3*8760-1));
+Blkout = table2array(input(:,"BlackoutProfile"));
+P_cell = table2array(input(:,"EffectiveLoad"));
+P = str2double(P_cell);
 
+geval =  P > 10
+P(geval) = P(geval)/1E6
+
+P_stack= repelem(table2array(Sol(:,2)),3);
+disp(P)
+Load = timeseries(P);
+P_solar = timeseries(P_stack);
+T_f = timeseries(Blkout);
+%mask = contains(P_cell.ColumnName, ',');
+
+%P_cell.ColumnName(mask)  = str2double(strrep(P_cell.ColumnName(mask),  ',', '.'));
+%P_cell.ColumnName(~mask) = str2double(P_cell.ColumnName(~mask));
 
 
 
@@ -21,7 +33,7 @@ Load = timetable(t,P);
 %elec_tbl = readtable("Year 2026 Load Calculation Fixed.xlsx", opts, "UseExcel", false);
 %Load = elec_tbl{:, 11}; % hourly load in kW
 
-P_solar = repelem(table2array(Sol(:,2)),3);
+
 
 eta_cc = 0.95;
 eta_dcdc = 0.98;
