@@ -5,16 +5,12 @@ projectRoot = fileparts(mfilename('fullpath'));
 addpath(fullfile(projectRoot,"scripts"));
 
 %% Load electricity demand
-opts = spreadsheetImportOptions("NumVariables", 11);
-opts.Sheet = "Y1 Load Profile 3";
-opts.DataRange = "A2:K26281";
-opts.VariableNames = ["Year", "Month", "Day", "Hour", "MonthlyLoad", "TotalDaysInThatMonth", "DailyEnergy", "HourlyConsumptionFactor", "FinalLoadProfileKW", "BlackoutProfile", "EffectiveLoad"];
-opts.VariableTypes = ["double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double"];
-elec_tbl = readtable("Year 2026 Load Calculation Fixed.xlsx", opts, "UseExcel", false);
-P_load = elec_tbl{:, 11}; % hourly load in kW
+elec_tbl = readtable('load_values_3_years.csv');
+P_load = elec_tbl{:, 11}; % 3-year hourly load in kW
 
 %% Load the solar generation profiles
 module=2; % 1 for longi, 2 for aiko
+
 south_tbl = readtable('generation_profile_south.xlsx', 'Sheet', 'Sheet1');
 north_tbl = readtable('generation_profile_north.xlsx', 'Sheet', 'Sheet1');
 if module == 1
@@ -49,20 +45,35 @@ params.dt_h = 1.0;
 if module == 1
     params.x_pv_ub = 12; % max 12 LONGi panels on each side of the roof
     params.x_pv2_ub = 12;
+    params.c_pv_unit_capex = 950; % cost per LONGi panel
 else
     params.x_pv_ub = 16; % max 16 AIKO panels on each side of the roof
     params.x_pv2_ub = 16;
+    params.c_pv_unit_capex = 800; % cost per AIKO panel
+end
+params.c_pv_unit_fom_per_year = 0;      % /year
+
+battery=1; % 1 for LFP, 2 for lead-acid
+
+if battery==1
+    params.c_bess_E_capex_per_kWh = 193.36;         % LFP Battery capex (EUR/kWh)
+    params.c_bess_E_fom_per_kWh_yr = 0;          % LFP Battery FOM (EUR/kWh/year)
+    params.eta_ch = sqrt(0.92);                 % Charging efficiency (round-trip loss: 0.92)
+    params.eta_dis = sqrt(0.92);
+else
+    params.c_bess_E_capex_per_kWh = 80.83;         % Lead-acid Battery capex (EUR/kWh)
+    params.c_bess_E_fom_per_kWh_yr = 0;          % Lead-acid Battery FOM (EUR/kWh/year)
+    params.eta_ch = sqrt(0.8);                 % Charging efficiency (round-trip loss: 0.8)
+    params.eta_dis = sqrt(0.8);
 end
 
 params.battery_c_rating = 1;             % C-rating: 1 h^-1 means 1hr discharge
-params.eta_ch = sqrt(0.92);                 % Charging efficiency (round-trip loss: 0.92)
-params.eta_dis = sqrt(0.92);
 params.batt_deg_per_cycle = 0.0002;         % 0.02% per cycle (event)
 params.soc_min = 0.15;                       % Min state-of-charge (15%)
 params.soc_max = 0.95;                       % Max state-of-charge (95%)
 params.soc0 = 0.95;                         % Initial SOC
-params.soc_tolerance = 45;                  % Cyclic tolerance (kWh)
-params.E_bess_ub = 150;                     % Battery energy upper bound (kWh)
+params.soc_tolerance = 65;                  % Cyclic tolerance (kWh)
+params.E_bess_ub = 120;                     % Battery energy upper bound (kWh)
 params.E_bess_lb = 0;
 params.soc_solar_allow = 0.95;
 params.soc_big_m = params.E_bess_ub;        % safe scale
@@ -71,21 +82,8 @@ params.soc_big_m = params.E_bess_ub;        % safe scale
 % Economics
 params.discount_rate = 0;
 params.project_life = 3;
-
-if module == 1
-    params.c_pv_unit_capex = 950; % cost per LONGi panel
-else
-    params.c_pv_unit_capex = 800; % cost per AIKO panel
-end
-params.c_pv_unit_fom_per_year = 0;      % /year
-
-params.c_bess_E_capex_per_kWh = 193.36;         % Battery capex (EUR/kWh)
-params.c_bess_E_fom_per_kWh_yr = 0;          % Battery FOM (EUR/kWh/year)
-
 params.slack_hourly_penalty_eur = 112.5; % compensation to clients
 params.slack_big_m = max(P_load) + 1; % safe big-M (kW)
-
-
 params.grid_price_eur_per_kwh = 0.2;
 params.grid_big_m = 1e6;  % or set to max expected import
 
@@ -136,9 +134,9 @@ constraint_registry = {@bind_power_balance, ...
 objective_registry = {@default_objective, @cost_slack, @cost_battery, @cost_grid};
 
 
-use_saved_result = true; % set false to run optimization
+use_saved_result = false; % set false to run optimization
 
-results_path = fullfile(projectRoot, 'results', 'longi_results.mat');
+results_path = fullfile(projectRoot, 'results', 'aiko_lfp.mat');
 
 if use_saved_result && isfile(results_path)
     loaded = load(results_path);
