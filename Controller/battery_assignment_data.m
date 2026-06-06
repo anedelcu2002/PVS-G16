@@ -1,7 +1,7 @@
 %% Parameters for Battery Assignment exercise
 
 %% Battery Parameters
-Q       = 73000;    % Battery (energy) capacity             [W*hr]
+Q       = 65000;    % Battery (energy) capacity             [W*hr]
 Vnom    = 48;       % Nominal voltage                       [V]
 AH      = Q/Vnom;   % Ampere-hour rating (capacity)         [A*hr]
 SOC0    = 95;       % Initial State of Charge               [%]
@@ -27,17 +27,19 @@ Grid=Load;
 Grid(Load==6000)=0;
 
 %% Load the solar generation profiles
-module=1; % 1 for longi, 2 for aiko
+module=2; % 1 for longi, 2 for aiko
 south_tbl = readtable('generation_profile_south.xlsx', 'Sheet', 'Sheet1');
 if module == 1
     P_solar = south_tbl{:,2};
     nr_panels = 6; % 6 panels in series
 else
     P_solar = south_tbl{:,3};
-    nr_panels = 8; % 8 panels in series
+    nr_panels = 7; % 8 panels in series
 end
 
 years = 3;
 P_solar = repmat(P_solar, years, 1); % 3-year range of per-panel generation in kWh
 P_solar = P_solar .* nr_panels .* 1000; % multiply per-panel generation by nr of panels
 Solar = [transpose(1:26280).*3600, P_solar];
+
+eff_cc = 0.95;

@@ -11,7 +11,7 @@ P_load = elec_tbl{:, 11}; % 3-year hourly load in kW
 %% Load the solar generation profiles
 module=1; % 1 for longi, 2 for aiko
 south_tbl = readtable('generation_profile_south.xlsx', 'Sheet', 'Sheet1');
-if module == 1
+if module == 2
     P_solar = south_tbl{:,2};
     nr_panels = 6; % 6 panels in series
 else
