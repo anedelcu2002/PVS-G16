@@ -1,12 +1,12 @@
 %% Parameters for Battery Assignment exercise
 
 %% Battery Parameters
-Q       = 4220;    % Battery (energy) capacity             [W*hr]
-Vnom    = 12.8;       % Nominal voltage                       [V]
+Q       = 73000;    % Battery (energy) capacity             [W*hr]
+Vnom    = 48;       % Nominal voltage                       [V]
 AH      = Q/Vnom;   % Ampere-hour rating (capacity)         [A*hr]
 SOC0    = 95;       % Initial State of Charge               [%]
-Nb_s    = 4;        % number of batteries in series         [-]     <-- Replace with the parameter for your system
-Nb_p    = 5;        % number of batteries in parallel       [-]     <-- Replace with the parameter for your system
+Nb_s    = 1;        % number of batteries in series         [-]     <-- Replace with the parameter for your system
+Nb_p    = 1;        % number of batteries in parallel       [-]     <-- Replace with the parameter for your system
 
 %% Other Parameters
 effConv = sqrt(0.92);        % Power converters (BESS) efficiency     [-]    <-- Replace with the correct value
