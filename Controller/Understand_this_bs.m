@@ -1,5 +1,6 @@
 % This file is purely for me to test for system behaviour with some dummy
 % code.
+clc; clear; close all; warning("off");
 
 Sol= readtable("generation_profile_south.xlsx");
 input = readtable("Year 2026 Load Calculation Fixed.csv");

@@ -1,0 +1,32 @@
+%% Parameters for Battery Assignment exercise
+
+%% Battery Parameters
+Q       = 13500;    % Battery (energy) capacity             [W*hr]
+Vnom    = 50;       % Nominal voltage                       [V]
+AH      = Q/Vnom;   % Ampere-hour rating (capacity)         [A*hr]
+SOC0    = 50;       % Initial State of Charge               [%]
+Nb_s    = 1;        % number of batteries in series         [-]     <-- Replace with the parameter for your system
+Nb_p    = 20;        % number of batteries in parallel       [-]     <-- Replace with the parameter for your system
+
+%% Other Parameters
+effConv = 1;        % Power converters (BESS) efficiency     [-]    <-- Replace with the correct value
+
+%% Data import
+Load = readtable("Load.xlsx");      % Reads load profile
+Load = table2array(Load(:,2:3));    % Converts table into array
+
+%% Grid Parameters
+f = 50;         % Grid frequency                [Hz]
+V = 400;        % Grid (RMS) line voltage       [V]
+
+%% Simulation parameters
+Ts    = 3600;     % Step-size of the simulation   [s]
+
+%% System parameters
+N_h = 1;    % Number of households  <-- Replace with 100 + last 2 digits of your student no.)
+P_gen = 320;  % Generated power       <-- Replace with your calculations of the constant power generation [W]
+
+%% Load electricity demand
+elec_tbl = readtable('load_values_3_years.csv');
+P_load = elec_tbl{:, 11}; % 3-year hourly load in kW
+%Load = [transpose(1:26280), P_load];
