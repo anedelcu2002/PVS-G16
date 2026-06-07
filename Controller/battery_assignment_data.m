@@ -1,7 +1,7 @@
 %% Parameters for Battery Assignment exercise
 
 %% Battery Parameters
-Q       = 65000;    % Battery (energy) capacity             [W*hr]
+Q       = 78000;    % Battery (energy) capacity             [W*hr]
 Vnom    = 48;       % Nominal voltage                       [V]
 AH      = Q/Vnom;   % Ampere-hour rating (capacity)         [A*hr]
 SOC0    = 95;       % Initial State of Charge               [%]
