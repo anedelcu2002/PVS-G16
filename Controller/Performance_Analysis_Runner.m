@@ -1,4 +1,4 @@
-clc; warning("off");
+clc; clear; close all; warning("off");
 
 %% Parameters for Battery Assignment exercise
 
@@ -49,21 +49,59 @@ batt_cap_factor = 1 - 0.02/100 * cycles_at_e;
 batt_cap_factor = max(batt_cap_factor, 0); % safety clamp
 
 %% run LFP
-cost_bat_unit = 990;         % LFP Battery capex
-effConv = sqrt(0.92);                 % Charging efficiency (round-trip loss: 0.92)
-Q       = 5120;    % Battery (energy) capacity             [W*hr]
-Vnom    = 25.6;       % Nominal voltage                       [V]
+%cost_bat_unit = 990;         % LFP Battery capex
+%effConv = sqrt(0.92);                 % Charging efficiency (round-trip loss: 0.92)
+%Q       = 5120;    % Battery (energy) capacity             [W*hr]
+%Vnom    = 25.6;       % Nominal voltage                       [V]
+%AH      = Q/Vnom;   % Ampere-hour rating (capacity)         [A*hr]
+%AH_EOL = AH*batt_cap_factor(end);
+%SOC0    = 95;       % Initial State of Charge               [%]
+%Nb_s    = 2;        % number of batteries in series         [-]     
+%Nb_p    = 8;        % number of batteries in parallel       [-]    
+%eff_cc = 0.95;
+
+%out = sim("Performance_Analysis.slx");
+%fprintf('\n--- LFP ---\n');
+%fprintf('  Maximum power imbalance (W):   %.2f\n', max(power_imbalance.Data));
+
+%eff_inv = eff_inv_grid_tied + eff_inv_blackout;
+
+%% calculate costs
+%cost_grid = sum(power_grid.Data/1000) * 0.2;
+%cost_PV = cost_module * nr_panels;
+%cost_battery = Nb_p * Nb_s * cost_bat_unit;
+%cost_other = 1193 + 360 + 514 + 1200;
+%cost_system = cost_PV + cost_battery + cost_other;
+%cost_compensation = length(Grid(Grid==0))*112.5;
+%cost_grid_alternative = sum(Grid(:,2))/1000*0.2;
+%lfp_savings = cost_compensation - cost_system + cost_grid_alternative - cost_grid;
+
+%fprintf('\n--- COST BREAKDOWN LFP (3-YEAR TOTAL, EUR) ---\n');
+%fprintf('  PV array + inverter:         %.2f\n', cost_PV);
+%fprintf('  Battery:                     %.2f\n', cost_battery);
+%fprintf('  Other costs:                 %.2f\n', cost_other);
+%fprintf('  Alternative compensation:    %.2f\n', cost_compensation);
+%fprintf('  Grid use:                    %.2f\n', cost_grid);
+%fprintf('  Alternative grid use:        %.2f\n', cost_grid_alternative)
+%fprintf('  Savings:                     %.2f\n', lfp_savings);
+
+%% run lead-acid
+
+cost_bat_unit = 485;         % Lead-acid Battery capex
+effConv = sqrt(0.8);                 % Charging efficiency (round-trip loss: 0.8)
+Q       = 3180;    % Battery (energy) capacity             [W*hr]
+Vnom    = 12;       % Nominal voltage                       [V]
 AH      = Q/Vnom;   % Ampere-hour rating (capacity)         [A*hr]
 AH_EOL = AH*batt_cap_factor(end);
 SOC0    = 95;       % Initial State of Charge               [%]
-Nb_s    = 2;        % number of batteries in series         [-]     
-Nb_p    = 8;        % number of batteries in parallel       [-]    
+Nb_s    = 4;        % number of batteries in series         [-]     
+Nb_p    = 8;        % number of batteries in parallel       [-] 
+
 eff_cc = 0.95;
 
 out = sim("Performance_Analysis.slx");
-fprintf('\n--- LFP ---\n');
+fprintf('\n--- Lead-acid ---\n');
 fprintf('  Maximum power imbalance (W):   %.2f\n', max(power_imbalance.Data));
-
 eff_inv = eff_inv_grid_tied + eff_inv_blackout;
 
 %% calculate costs
@@ -74,54 +112,16 @@ cost_other = 1193 + 360 + 514 + 1200;
 cost_system = cost_PV + cost_battery + cost_other;
 cost_compensation = length(Grid(Grid==0))*112.5;
 cost_grid_alternative = sum(Grid(:,2))/1000*0.2;
-lfp_savings = cost_compensation - cost_system + cost_grid_alternative - cost_grid;
+la_savings = cost_compensation - cost_system + cost_grid_alternative - cost_grid;
 
-fprintf('\n--- COST BREAKDOWN LFP (3-YEAR TOTAL, EUR) ---\n');
+fprintf('\n--- COST BREAKDOWN LEAD-ACID (3-YEAR TOTAL, EUR) ---\n');
 fprintf('  PV array + inverter:         %.2f\n', cost_PV);
 fprintf('  Battery:                     %.2f\n', cost_battery);
 fprintf('  Other costs:                 %.2f\n', cost_other);
 fprintf('  Alternative compensation:    %.2f\n', cost_compensation);
 fprintf('  Grid use:                    %.2f\n', cost_grid);
 fprintf('  Alternative grid use:        %.2f\n', cost_grid_alternative)
-fprintf('  Savings:                     %.2f\n', lfp_savings);
-
-%% run lead-acid
-
-%cost_bat_unit = 485;         % Lead-acid Battery capex
-%effConv = sqrt(0.8);                 % Charging efficiency (round-trip loss: 0.8)
-%Q       = 3180;    % Battery (energy) capacity             [W*hr]
-%Vnom    = 12;       % Nominal voltage                       [V]
-%AH      = Q/Vnom;   % Ampere-hour rating (capacity)         [A*hr]
-%AH_EOL = AH*batt_cap_factor(end);
-%SOC0    = 95;       % Initial State of Charge               [%]
-%Nb_s    = 4;        % number of batteries in series         [-]     
-%Nb_p    = 7;        % number of batteries in parallel       [-] 
-
-%eff_cc = 0.95;
-
-%out = sim("Performance_Analysis.slx");
-%fprintf('\n--- Lead-acid ---\n');
-%fprintf('  Maximum power imbalance (W):   %.2f\n', max(power_imbalance.Data));
-eff_inv = eff_inv_grid_tied + eff_inv_blackout;
-
-%% calculate costs
-%cost_grid = sum(power_grid.Data/1000) * 0.2;
-%cost_PV = cost_module * nr_panels;
-%cost_battery = Nb_p * Nb_s * cost_bat_unit;
-%cost_other = 1193 + 360 + 514 + 1200;
-%cost_system = cost_PV + cost_battery + cost_other;
-%cost_compensation = length(Grid(Grid==0))*112.5;
-%cost_grid_alternative = sum(Grid(:,2))/1000*0.2;
-%la_savings = cost_compensation - cost_system + cost_grid_alternative - cost_grid;
-
-%fprintf('\n--- COST BREAKDOWN LEAD-ACID (3-YEAR TOTAL, EUR) ---\n');
-%fprintf('  PV array + inverter:         %.2f\n', cost_PV);
-%fprintf('  Battery:                     %.2f\n', cost_battery);
-%fprintf('  Other costs:                 %.2f\n', cost_other);
-%fprintf('  Alternative compensation:    %.2f\n', cost_compensation);
-%fprintf('  Grid use:                    %.2f\n', cost_grid);
-%fprintf('  Alternative grid use:        %.2f\n', cost_grid_alternative)
-%fprintf('  Savings:                     %.2f\n', la_savings);
+fprintf('  Savings:                     %.2f\n', la_savings);
 
 
 %fprintf('\n--- LFP vs lead-acid ---\n');
