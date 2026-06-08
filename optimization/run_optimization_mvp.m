@@ -136,7 +136,7 @@ objective_registry = {@default_objective, @cost_slack, @cost_battery, @cost_grid
 
 use_saved_result = true; % set false to run optimization
 
-results_path = fullfile(projectRoot, 'results', 'aiko_lfp.mat');
+results_path = fullfile(projectRoot, 'results', 'longi_lfp.mat');
 
 if use_saved_result && isfile(results_path)
     loaded = load(results_path);
@@ -496,15 +496,15 @@ yline(0, 'k--', 'LineWidth', 0.5);
 % --- HORIZON BATTERY STATE OF CHARGE ---
 fig6 = figure('Name', 'Horizon Battery State of Charge', 'NumberTitle', 'off', ...
               'Position', [center_x center_y 800 600], 'WindowStyle', 'docked');
-soc_annual = result_50.e_stored / result_50.E_bess;
-plot(0:T, soc_annual, 'LineWidth', 1.5, 'Color', '#0066FF');
+soc_annual = result_50.e_stored(1:8760) / result_50.E_bess;
+plot(0:8759, soc_annual, 'LineWidth', 1.5, 'Color', '#0066FF');
 hold on;
 
-soc_min_t = params.soc_min .* data.batt_cap_factor;
-soc_max_t = params.soc_max .* data.batt_cap_factor;
-plot(0:T, soc_min_t, 'r--', 'LineWidth', 1.5, ...
+soc_min_t = params.soc_min .* data.batt_cap_factor(1:8760);
+soc_max_t = params.soc_max .* data.batt_cap_factor(1:8760);
+plot(0:8759, soc_min_t, 'r--', 'LineWidth', 1.5, ...
      'DisplayName', sprintf('Min SOC (%.0f%%)', params.soc_min*100));
-plot(0:T, soc_max_t, 'g--', 'LineWidth', 1.5, ...
+plot(0:8759, soc_max_t, 'g--', 'LineWidth', 1.5, ...
      'DisplayName', sprintf('Max SOC (%.0f%%)', params.soc_max*100));
 
 hold off;
@@ -514,5 +514,5 @@ title(sprintf('Horizon Battery State of Charge\n%s', titleSuffix));
 legend('Location', 'best');
 grid on;
 ylim([0 1]);
-xlim([0 T+100]);
+xlim([0 8759+100]);
 
