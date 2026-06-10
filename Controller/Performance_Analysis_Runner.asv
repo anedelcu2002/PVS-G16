@@ -23,11 +23,11 @@ south_tbl = readtable('generation_profile_south.xlsx', 'Sheet', 'Sheet1');
 if module == 1
     cost_module = 950;
     P_solar = south_tbl{:,2};
-    nr_panels = 5; % 5 panels in series
+    nr_panels = 5; % 4 panels in series
 else
     cost_module = 800;
     P_solar = south_tbl{:,3};
-    nr_panels = 7; % 7 panels in series
+    nr_panels = 6; % 6 panels in series
 end
 
 years = 3;
@@ -57,7 +57,7 @@ batt_cap_factor = max(batt_cap_factor, 0); % safety clamp
 %AH_EOL = AH*batt_cap_factor(end);
 %SOC0    = 95;       % Initial State of Charge               [%]
 %Nb_s    = 2;        % number of batteries in series         [-]     
-%Nb_p    = 8;        % number of batteries in parallel       [-]    
+%Nb_p    = 7;        % number of batteries in parallel       [-]    
 %eff_cc = 0.95;
 
 %out = sim("Performance_Analysis.slx");
@@ -65,6 +65,37 @@ batt_cap_factor = max(batt_cap_factor, 0); % safety clamp
 %fprintf('  Maximum power imbalance (W):   %.2f\n', max(power_imbalance.Data));
 
 %eff_inv = eff_inv_grid_tied + eff_inv_blackout;
+%avg_nonzero = mean(eff_inv_grid_tied.Data (eff_inv_grid_tied.Data  ~= 0));
+
+%max(system_current)
+%min(system_current)
+%figure;
+%plot(eff_inv)
+%plot(system_current)
+%plot(SoC)
+%plot(solar_to_load)
+%sum(solar_to_load/1000)
+
+%start_date = datetime(2025, 1, 1, 0, 0, 0);
+%end_date = datetime(2028, 1, 1, 0, 0, 0);
+%dt_array = start_date:hours(1):end_date;
+%plot(transpose(dt_array), solar_to_load.Data)
+
+% Create timetable from your data
+%TT = timetable(transpose(dt_array), solar_to_load.Data, ...
+    %'VariableNames', {'SolarPV'});
+
+% Aggregate to monthly sum (Wh to monthly Wh, or convert to kWh)
+%monthly_sum = retime(TT, 'monthly', 'sum');
+
+% Plot monthly totals
+%figure;
+%bar(monthly_sum.Time, monthly_sum.SolarPV/1000); % Convert to kWh
+%xlabel('Month');
+%ylim([0,220])
+%ylabel('Monthly Solar PV Output (kWh)');
+%title('Monthly Solar PV Generation');
+%grid on;
 
 %% calculate costs
 %cost_grid = sum(power_grid.Data/1000) * 0.2;
@@ -89,13 +120,13 @@ batt_cap_factor = max(batt_cap_factor, 0); % safety clamp
 
 cost_bat_unit = 485;         % Lead-acid Battery capex
 effConv = sqrt(0.8);                 % Charging efficiency (round-trip loss: 0.8)
-Q       = 3180;    % Battery (energy) capacity             [W*hr]
-Vnom    = 12;       % Nominal voltage                       [V]
+Q       = 35;    % Battery (energy) capacity             [W*hr]
+Vnom    = 2;       % Nominal voltage                       [V]
 AH      = Q/Vnom;   % Ampere-hour rating (capacity)         [A*hr]
 AH_EOL = AH*batt_cap_factor(end);
 SOC0    = 95;       % Initial State of Charge               [%]
-Nb_s    = 4;        % number of batteries in series         [-]     
-Nb_p    = 7;        % number of batteries in parallel       [-] 
+Nb_s    = 24;        % number of batteries in series         [-]     
+Nb_p    = 1;        % number of batteries in parallel       [-] 
 
 eff_cc = 0.95;
 

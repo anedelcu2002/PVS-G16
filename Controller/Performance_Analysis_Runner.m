@@ -18,7 +18,7 @@ Grid=Load;
 Grid(Load==6000)=0;
 
 %% Load the solar generation profiles
-module=2; % 1 for longi, 2 for aiko
+module=1; % 1 for longi, 2 for aiko
 south_tbl = readtable('generation_profile_south.xlsx', 'Sheet', 'Sheet1');
 if module == 1
     cost_module = 950;
@@ -27,7 +27,7 @@ if module == 1
 else
     cost_module = 800;
     P_solar = south_tbl{:,3};
-    nr_panels = 7; % 7 panels in series
+    nr_panels = 8; % 6 panels in series
 end
 
 years = 3;
@@ -57,7 +57,7 @@ AH      = Q/Vnom;   % Ampere-hour rating (capacity)         [A*hr]
 AH_EOL = AH*batt_cap_factor(end);
 SOC0    = 95;       % Initial State of Charge               [%]
 Nb_s    = 2;        % number of batteries in series         [-]     
-Nb_p    = 8;        % number of batteries in parallel       [-]    
+Nb_p    = 7;        % number of batteries in parallel       [-]    
 eff_cc = 0.95;
 
 out = sim("Performance_Analysis.slx");
@@ -65,16 +65,36 @@ fprintf('\n--- LFP ---\n');
 fprintf('  Maximum power imbalance (W):   %.2f\n', max(power_imbalance.Data));
 
 eff_inv = eff_inv_grid_tied + eff_inv_blackout;
-avg_nonzero = mean(eff_inv_grid_tied.Data (eff_inv_grid_tied.Data  ~= 0));
+%avg_nonzero = mean(eff_inv_grid_tied.Data (eff_inv_grid_tied.Data  ~= 0))
 
-%max(system_current)
-%min(system_current)
-figure;
+max(system_current)
+min(system_current)
+%figure;
 %plot(eff_inv)
 %plot(system_current)
 %plot(SoC)
 %plot(solar_to_load)
 sum(solar_to_load/1000)
+
+%figure;
+
+%figure;
+
+% Extract time and data
+%time_seconds = eff_inv.Time;      % Time in seconds
+%data = SoC;              % Your data
+
+% Convert seconds to hours
+%time_hours = time_seconds / 3600;
+
+% Plot with thicker line
+%plot(time_hours, data, 'LineWidth', 2.5);  % Adjust thickness as needed
+
+% Label axes
+%xlabel('Time (hours)');
+%ylabel('Data Value');
+%title('Line Plot of eff_inv');
+%grid on;
 
 start_date = datetime(2025, 1, 1, 0, 0, 0);
 end_date = datetime(2028, 1, 1, 0, 0, 0);
@@ -120,13 +140,13 @@ fprintf('  Savings:                     %.2f\n', lfp_savings);
 
 %cost_bat_unit = 485;         % Lead-acid Battery capex
 %effConv = sqrt(0.8);                 % Charging efficiency (round-trip loss: 0.8)
-%Q       = 2500;    % Battery (energy) capacity             [W*hr]
-%Vnom    = 2;       % Nominal voltage                       [V]
+%Q       = 1920;    % Battery (energy) capacity             [W*hr]
+%Vnom    = 12;       % Nominal voltage                       [V]
 %AH      = Q/Vnom;   % Ampere-hour rating (capacity)         [A*hr]
 %AH_EOL = AH*batt_cap_factor(end);
 %SOC0    = 95;       % Initial State of Charge               [%]
-%Nb_s    = 24;        % number of batteries in series         [-]     
-%Nb_p    = 1;        % number of batteries in parallel       [-] 
+%Nb_s    = 4;        % number of batteries in series         [-]     
+%Nb_p    = 9;        % number of batteries in parallel       [-] 
 
 %eff_cc = 0.95;
 

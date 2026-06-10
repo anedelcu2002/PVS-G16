@@ -90,8 +90,11 @@ output = table( ...
 writetable(output, 'POA_Optimal_HayDavies.xlsx');
 
 %% Plot
+% Gbn = data.G_Bn;
+%Gdh = data.G_Dh;
+%Ggh = data.G_Gh;
 figure;
-plot(G_POA(1:48), 'LineWidth', 1.5);
+plot(Ggh, 'LineWidth', 1.5);
 xlabel('Hour');
 ylabel('Irradiance (W/m^2)');
 title('POA Irradiance (First 2 Days)');
