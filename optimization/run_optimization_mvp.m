@@ -9,7 +9,7 @@ elec_tbl = readtable('load_values_3_years.csv');
 P_load = elec_tbl{:, 11}; % 3-year hourly load in kW
 
 %% Load the solar generation profiles
-module=1; % 1 for longi, 2 for aiko
+module=2; % 1 for longi, 2 for aiko
 
 south_tbl = readtable('generation_profile_south.xlsx', 'Sheet', 'Sheet1');
 north_tbl = readtable('generation_profile_north.xlsx', 'Sheet', 'Sheet1');
@@ -53,7 +53,7 @@ else
 end
 params.c_pv_unit_fom_per_year = 0;      % /year
 
-battery=1; % 1 for LFP, 2 for lead-acid
+battery=2; % 1 for LFP, 2 for lead-acid
 
 if battery==1
     params.c_bess_E_capex_per_kWh = 193.36;         % LFP Battery capex (EUR/kWh)
@@ -134,9 +134,9 @@ constraint_registry = {@bind_power_balance, ...
 objective_registry = {@default_objective, @cost_slack, @cost_battery, @cost_grid};
 
 
-use_saved_result = true; % set false to run optimization
+use_saved_result = false; % set false to run optimization
 
-results_path = fullfile(projectRoot, 'results', 'longi_lfp.mat');
+results_path = fullfile(projectRoot, 'results', 'aiko_leadacid.mat');
 
 if use_saved_result && isfile(results_path)
     loaded = load(results_path);
