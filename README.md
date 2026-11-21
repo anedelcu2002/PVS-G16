@@ -12,4 +12,4 @@ A workflow for the design and performance analysis of a PV-battery system used t
 
 - PV generation profiles: Ali Eren
 - Optimization problem and performance analysis: Alex Nedelcu
-- Performance analysis: Per van der Klauw
+- Performance analysis: Alex Nedelcu, Per van der Klauw
